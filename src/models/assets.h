@@ -8,6 +8,7 @@ namespace assets {
         double low;
         double high;
         double adjclose;
+        uint32_t timestamp;
     };
 
     struct data_point_red{

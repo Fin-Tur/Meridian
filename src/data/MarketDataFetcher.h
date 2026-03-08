@@ -26,6 +26,7 @@ namespace data_fetcher {
         auto& highs  = quote["high"];
         auto& lows   = quote["low"];
         auto& closes = j["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"];
+        auto& timestamps = j["chart"]["result"][0]["timestamp"];
 
         assets::asset a;
         a.symbol = symbol;
@@ -35,10 +36,11 @@ namespace data_fetcher {
 
         for (size_t i = 0; i < closes.size(); i++) {
             if (closes[i].is_null() || highs[i].is_null() || lows[i].is_null()) continue;
-            a.data_points[i] = {
-                lows[i].get<double>(),
-                highs[i].get<double>(),
-                closes[i].get<double>()
+            a.data_points[i] = assets::data_point{
+                .low = lows[i].get<double>(),
+                .high = highs[i].get<double>(),
+                .adjclose = closes[i].get<double>(),
+                .timestamp = timestamps[i].get<uint32_t>() / 86400 //Convert to Days
             };
         }
         return a;
@@ -72,10 +74,11 @@ namespace data_fetcher {
                 auto& candle = j[i];
                 if (candle[4].is_null()) continue;
                 double close_price = candle[4].get<double>();
-                a.data_points[i] = {
-                    close_price,  
-                    close_price,  
-                    close_price   
+                a.data_points[i] = assets::data_point{
+                    .low = close_price,
+                    .high = close_price,
+                    .adjclose = close_price,
+                    .timestamp = static_cast<uint32_t>(candle[0].get<long long>() / (1000 * 86400)) //Convert to Days
                 };
             }
             return a;
@@ -84,10 +87,11 @@ namespace data_fetcher {
         for (size_t i = 0; i < j.size(); i++) {
             auto& candle = j[i];
             if (candle[2].is_null()) continue;
-            a.data_points[i] = {
-                candle[3].get<double>(),  
-                candle[2].get<double>(),  
-                candle[4].get<double>()   
+            a.data_points[i] = assets::data_point{
+                .low = candle[3].get<double>(),  
+                .high = candle[2].get<double>(),  
+                .adjclose = candle[4].get<double>(),  
+                .timestamp = static_cast<uint32_t>(candle[0].get<long long>() / (1000 * 86400)) //Convert to Days
             };
         }
         return a;

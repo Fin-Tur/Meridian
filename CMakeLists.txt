@@ -10,4 +10,5 @@ add_executable(Meridian
     )
 
 find_package(OpenSSL REQUIRED)
-target_link_libraries(Meridian PRIVATE OpenSSL::SSL OpenSSL::Crypto)
+find_package(Eigen3 REQUIRED)
+target_link_libraries(Meridian PRIVATE OpenSSL::SSL OpenSSL::Crypto Eigen3::Eigen)
