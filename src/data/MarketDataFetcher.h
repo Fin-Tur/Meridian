@@ -46,52 +46,38 @@ namespace data_fetcher {
         return a;
 }
 
-    // From 91 Days on, High & low are not given, so we can only use the close price for those days. We set high and low to the close price in this case.
+    // Uses CoinGecko market_chart endpoint with daily interval to ensure timestamp
+    // alignment with stock data from Yahoo Finance (both return one data point per calendar day).
     assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 365) {
         httplib::SSLClient client("api.coingecko.com");
 
         std::string path = "/api/v3/coins/";
         path += coinId;
-        path += "/ohlc?vs_currency=usd&days=" + std::to_string(days);
+        path += "/market_chart?vs_currency=usd&days=" + std::to_string(days) + "&interval=daily";
 
         auto res = client.Get(path.c_str());
-
 
         if (!res || res->status != 200) {
             return assets::asset{};
         }
 
-        auto j   = nlohmann::json::parse(res->body);
+        auto j = nlohmann::json::parse(res->body);
+        auto& prices = j["prices"]; // [[timestamp_ms, price], ...]
 
         assets::asset a;
         a.symbol = symbol;
-        a.n_data_points = j.size();
+        a.n_data_points = prices.size();
         a.data_points = new assets::data_point[a.n_data_points];
         a.currency = "USD";
 
-        if(days > 90) {
-            for (size_t i = 0; i < j.size(); i++) {
-                auto& candle = j[i];
-                if (candle[4].is_null()) continue;
-                double close_price = candle[4].get<double>();
-                a.data_points[i] = assets::data_point{
-                    .low = close_price,
-                    .high = close_price,
-                    .adjclose = close_price,
-                    .timestamp = static_cast<uint32_t>(candle[0].get<long long>() / (1000 * 86400)) //Convert to Days
-                };
-            }
-            return a;
-        }
-
-        for (size_t i = 0; i < j.size(); i++) {
-            auto& candle = j[i];
-            if (candle[2].is_null()) continue;
+        for (size_t i = 0; i < prices.size(); i++) {
+            if (prices[i][1].is_null()) continue;
+            double close_price = prices[i][1].get<double>();
             a.data_points[i] = assets::data_point{
-                .low = candle[3].get<double>(),  
-                .high = candle[2].get<double>(),  
-                .adjclose = candle[4].get<double>(),  
-                .timestamp = static_cast<uint32_t>(candle[0].get<long long>() / (1000 * 86400)) //Convert to Days
+                .low = close_price,
+                .high = close_price,
+                .adjclose = close_price,
+                .timestamp = static_cast<uint32_t>(prices[i][0].get<long long>() / (1000LL * 86400)) //Convert ms to Days
             };
         }
         return a;

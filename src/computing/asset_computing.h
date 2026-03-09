@@ -44,13 +44,25 @@ namespace asset_compute {
         for (size_t i = 0; i < n_assets; i++) {
             for (size_t j = i; j < n_assets; j++) {
                 auto aligned_returns = log_return_aligned_assets(const_cast<assets::asset&>(assets[i]), const_cast<assets::asset&>(assets[j]));
-                double cov_ij = 0.0;
-                double avg_i = avg_log_return(assets[i]);
-                double avg_j = avg_log_return(assets[j]);
-                for (const auto& pair : aligned_returns) {
-                    cov_ij += (pair.first - avg_i) * (pair.second - avg_j);
+                if (aligned_returns.size() < 2) {
+                    cov_matrix(i, j) = 0.0;
+                    cov_matrix(j, i) = 0.0;
+                    continue;
                 }
-                cov_matrix(i, j) = cov_ij / (aligned_returns.size() - 1);
+                //aligned subset only
+                double mean_i = 0.0, mean_j = 0.0;
+                for (const auto& p : aligned_returns) {
+                    mean_i += p.first;
+                    mean_j += p.second;
+                }
+                mean_i /= aligned_returns.size();
+                mean_j /= aligned_returns.size();
+
+                double cov_ij = 0.0;
+                for (const auto& p : aligned_returns) {
+                    cov_ij += (p.first - mean_i) * (p.second - mean_j);
+                }
+                cov_matrix(i, j) = cov_ij / static_cast<double>(aligned_returns.size() - 1);
                 cov_matrix(j, i) = cov_matrix(i, j); //Symmetric matrix
             }
         }
@@ -64,7 +76,7 @@ namespace asset_compute {
         for(size_t i = 0; i < n_rows; ++i){
             for(size_t j = i; j < n_cols; ++j){
                 cov_matrix(i,j) /= std::sqrt(diag(i) * diag(j));
-                cov_matrix(j,i) = cov_matrix(i,j); //Symmetric matrix
+                cov_matrix(j,i) = cov_matrix(i,j); 
             }
         }
     }
@@ -72,8 +84,9 @@ namespace asset_compute {
     double volatility(const assets::asset& asset){
         double avg_return = avg_log_return(asset);
         double volatility_sum = 0.0;
-        for(size_t i = 1; i < asset.n_data_points; i++){
-            volatility_sum += (asset.data_points[i].adjclose - avg_return) * (asset.data_points[i].adjclose - avg_return);
+        for(size_t i = 1; i < (size_t)asset.n_data_points; i++){
+            double log_ret = std::log(asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose);
+            volatility_sum += (log_ret - avg_return) * (log_ret - avg_return);
         }
         return std::sqrt(volatility_sum / (asset.n_data_points - 1));
     }

@@ -1,36 +1,23 @@
 #include <iostream>
 #include "data/MarketDataFetcher.h"
+#include "computing/asset_computing.h"
+#include "computing/monte_carlo_engine.h"
 
 int main() {
     std::string symbol = "AAPL";
     assets::asset a = data_fetcher::fetch_stock(symbol);
 
-    std::cout << "Symbol:   " << a.symbol << "\n";
-    std::cout << "Currency: " << a.currency << "\n";
-    std::cout << "Points:   " << a.n_data_points << "\n\n";
-
-    // Erste und letzte 3 Datenpunkte ausgeben
-    for (size_t i = 0; i < 3; i++) {
-        std::cout << "high: " << a.data_points[i].high
-                  << "  low: "  << a.data_points[i].low
-                  << "  close: "<< a.data_points[i].adjclose << "\n";
-    }
-
-    std::cout << "...\n";
-
-    for (size_t i = a.n_data_points - 3; i < a.n_data_points; i++) {
-        std::cout << "high: " << a.data_points[i].high
-                  << "  low: "  << a.data_points[i].low
-                  << "  close: "<< a.data_points[i].adjclose << "\n";
-    }
-
-    // Crypto
     std::string coinId = "bitcoin";
     std::string btcSymbol = "BTC";
     assets::asset btc = data_fetcher::fetch_crypto(coinId, btcSymbol);
 
-    std::cout << "\nSymbol:   " << btc.symbol << "\n";
-    std::cout << "Currency: " << btc.currency << "\n";
-    std::cout << "Points:   " << btc.n_data_points << "\n";
+    std::vector<assets::asset> assets;
+    assets.push_back(std::move(a));
+    assets.push_back(std::move(btc));
+    std::vector<double> weights = {0.5, 0.5};
+    auto preset = monte_carlo::generate_sim_preset(assets, weights, 10000, 252);
+    auto res = monte_carlo::run_simulation(preset);
+
+
     return 0;
 }
