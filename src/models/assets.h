@@ -21,7 +21,7 @@ namespace assets {
         std::string currency;
         int32_t n_data_points;
         data_point* data_points;
-        
+        double weight = 1.0;
         ~asset() {
             delete[] data_points;
         }
