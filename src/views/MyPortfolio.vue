@@ -4,6 +4,8 @@ import { Pie } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 import { fetch_portfolio, fetch_correlation } from '@/services/api.js'
 import { usePortfolioStore } from '@/stores/counter.js'
+import InfoCard from '@/components/InfoCard.vue'
+import SearchBar from '@/components/SearchBar.vue'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -13,7 +15,7 @@ const portfolio = ref(null)
 const correlation = ref(null)
 const loading = ref(true)
 
-// Add-asset form
+//Add-asset form
 const newSymbol = ref('')
 const newQuantity = ref(1)
 
@@ -112,12 +114,7 @@ function fmtUsd(val) {
     <div class="bg-bg-card border border-border rounded-xl p-6 mb-6 transition hover:bg-bg-card-hover">
       <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Manage Assets</div>
       <div class="flex gap-3 mb-3">
-        <input
-          v-model="newSymbol"
-          placeholder="Symbol (e.g. AAPL)"
-          @keydown.enter="addAsset"
-          class="flex-1 max-w-64 bg-bg-secondary border border-border text-text-primary px-4 py-2.5 rounded-lg text-sm outline-none transition focus:border-accent"
-        />
+        <SearchBar v-model="newSymbol" :text="'Enter asset symbol (e.g. AAPL)'" @search="addAsset" />
         <input
           v-model.number="newQuantity"
           type="number"

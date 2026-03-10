@@ -6,6 +6,9 @@ import {
   Tooltip, Legend
 } from 'chart.js'
 import { fetch_asset } from '@/services/api.js'
+import InfoCard from '@/components/InfoCard.vue'
+import SearchBar from '@/components/SearchBar.vue'
+import Histogram from '@/components/Histogram.vue'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -25,7 +28,7 @@ async function search() {
 
 const histData = computed(() => {
   if (!asset.value?.adj_closes || asset.value.adj_closes.length < 2) return null
-  // Compute daily log returns
+  // Compute daily log returns - IN BACKEND IMPL
   const closes = asset.value.adj_closes
   const returns = []
   for (let i = 1; i < closes.length; i++) {
@@ -95,10 +98,6 @@ const histOptions = {
   },
 }
 
-function fmtPct(val) {
-  if (val == null) return '–'
-  return (val >= 0 ? '+' : '') + val.toFixed(4)
-}
 </script>
 
 <template>
@@ -107,12 +106,7 @@ function fmtPct(val) {
 
     <!-- Search -->
     <div class="flex gap-3 mb-8">
-      <input
-        v-model="symbol"
-        placeholder="Enter ticker symbol (e.g. AAPL)"
-        @keydown.enter="search"
-        class="flex-1 max-w-sm bg-bg-secondary border border-border text-text-primary px-4 py-2.5 rounded-lg text-sm outline-none transition focus:border-accent"
-      />
+      <SearchBar v-model="symbol" :text="'Enter asset symbol (e.g. AAPL)'" @search="search" />
       <button @click="search" :disabled="loading"
               class="px-5 py-2.5 bg-accent text-white font-semibold text-sm rounded-lg transition hover:bg-accent-hover cursor-pointer disabled:opacity-50">
         {{ loading ? 'Loading…' : 'Search' }}
@@ -132,43 +126,20 @@ function fmtPct(val) {
 
       <!-- Stats grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Volatility</div>
-          <div class="text-2xl font-bold">{{ (asset.volatility * 100).toFixed(2) }}%</div>
-        </div>
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Avg Log Return</div>
-          <div class="text-2xl font-bold" :class="asset.avg_log_return >= 0 ? 'text-positive' : 'text-negative'">
-            {{ fmtPct(asset.avg_log_return) }}
-          </div>
-        </div>
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Sharpe Ratio</div>
-          <div class="text-2xl font-bold">{{ asset.sharpe_ratio?.toFixed(3) ?? '–' }}</div>
-        </div>
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Max Drawdown</div>
-          <div class="text-2xl font-bold text-negative">{{ (asset.max_drawdown * 100).toFixed(2) }}%</div>
-        </div>
+        <InfoCard title="Volatility" :val="asset.volatility" :type="'percentile'" :decimals="2" />
+        <InfoCard title="Avg Log Return" :val="asset.avg_log_return" :type="'beneficial'" :decimals="4" />
+        <InfoCard title="Sharpe Ratio" :val="asset.sharpe_ratio" :decimals="3" />
+        <InfoCard title="Max Drawdown" :val="asset.max_drawdown" :type="'beneficial-percentile'" :decimals="2" />
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">YTD Return</div>
-          <div class="text-2xl font-bold" :class="asset.ytd_returns >= 0 ? 'text-positive' : 'text-negative'">
-            {{ (asset.ytd_returns * 100).toFixed(2) }}%
-          </div>
-        </div>
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Skewness</div>
-          <div class="text-2xl font-bold">{{ asset.skewness?.toFixed(4) ?? '–' }}</div>
-        </div>
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Kurtosis</div>
-          <div class="text-2xl font-bold">{{ asset.kurtosis?.toFixed(4) ?? '–' }}</div>
-        </div>
+        <InfoCard title="YTD Returns" :val="asset.ytd_returns" :type="'beneficial-percentile'" :decimals="2" />
+        <InfoCard title="Skewness" :val="asset.skewness" :decimals="4" />
+        <InfoCard title="Kurtosis" :val="asset.kurtosis" :decimals="4" />
       </div>
-
+      <div>
+        <Histogram :values="[0, 1, 2, 5, 3, 0, 1]" type="percent"/>
+      </div>
       <!-- Histogram of daily returns -->
       <div v-if="histData" class="bg-bg-card border border-border rounded-xl p-6 flex flex-col transition hover:bg-bg-card-hover">
         <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Daily Return Distribution</div>
