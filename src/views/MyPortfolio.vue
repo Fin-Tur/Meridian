@@ -105,94 +105,102 @@ function fmtUsd(val) {
 </script>
 
 <template>
-  <div class="page">
-    <h1 class="page-title">My Portfolio</h1>
+  <div class="max-w-6xl mx-auto px-6 py-8">
+    <h1 class="text-2xl font-bold mb-6">My Portfolio</h1>
 
     <!-- Add asset form -->
-    <div class="card add-asset-card">
-      <div class="card-title">Manage Assets</div>
-      <div class="add-asset-form">
+    <div class="bg-bg-card border border-border rounded-xl p-6 mb-6 transition hover:bg-bg-card-hover">
+      <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Manage Assets</div>
+      <div class="flex gap-3 mb-3">
         <input
           v-model="newSymbol"
           placeholder="Symbol (e.g. AAPL)"
           @keydown.enter="addAsset"
+          class="flex-1 max-w-64 bg-bg-secondary border border-border text-text-primary px-4 py-2.5 rounded-lg text-sm outline-none transition focus:border-accent"
         />
         <input
           v-model.number="newQuantity"
           type="number"
           min="1"
           placeholder="Qty"
-          class="qty-input"
           @keydown.enter="addAsset"
+          class="w-24 bg-bg-secondary border border-border text-text-primary px-4 py-2.5 rounded-lg text-sm outline-none transition focus:border-accent"
         />
-        <button class="btn btn-primary" @click="addAsset">Add Asset</button>
+        <button @click="addAsset" class="px-5 py-2.5 bg-accent text-white font-semibold text-sm rounded-lg transition hover:bg-accent-hover cursor-pointer">
+          Add Asset
+        </button>
       </div>
-      <div v-if="store.assets.length" class="asset-tags">
-        <span v-for="a in store.assets" :key="a.symbol" class="asset-tag">
-          {{ a.symbol }} <span class="tag-qty">×{{ a.quantity }}</span>
-          <button class="tag-remove" @click="removeAsset(a.symbol)">×</button>
+      <div v-if="store.assets.length" class="flex flex-wrap gap-2">
+        <span v-for="a in store.assets" :key="a.symbol" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent-muted text-accent text-xs font-semibold">
+          {{ a.symbol }}
+          <span class="text-text-secondary font-normal">×{{ a.quantity }}</span>
+          <button @click="removeAsset(a.symbol)" class="bg-transparent border-none text-text-secondary cursor-pointer text-sm leading-none transition hover:text-negative">×</button>
         </span>
       </div>
     </div>
 
-    <div v-if="loading" class="loading">
+    <div v-if="loading" class="flex items-center justify-center min-h-72 text-text-secondary">
       <div class="spinner"></div>
       Loading portfolio…
     </div>
 
     <template v-else-if="portfolio">
       <!-- Summary row -->
-      <div class="grid-3 summary-row">
-        <div class="card">
-          <div class="card-title">Total Value</div>
-          <div class="stat-value">{{ fmtUsd(portfolio.total_value) }}</div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Total Value</div>
+          <div class="text-2xl font-bold">{{ fmtUsd(portfolio.total_value) }}</div>
         </div>
-        <div class="card">
-          <div class="card-title">Assets</div>
-          <div class="stat-value">{{ portfolio.assets?.length ?? 0 }}</div>
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Assets</div>
+          <div class="text-2xl font-bold">{{ portfolio.assets?.length ?? 0 }}</div>
         </div>
-        <div class="card">
-          <div class="card-title">Portfolio Return</div>
-          <div class="stat-value" :class="portfolio.total_return >= 0 ? 'positive' : 'negative'">
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Portfolio Return</div>
+          <div class="text-2xl font-bold" :class="portfolio.total_return >= 0 ? 'text-positive' : 'text-negative'">
             {{ fmtPct(portfolio.total_return) }}
           </div>
         </div>
       </div>
 
       <!-- Pie chart + Table -->
-      <div class="content-grid">
-        <div class="card pie-card">
-          <div class="card-title">Allocation</div>
-          <div class="pie-wrapper">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div class="bg-bg-card border border-border rounded-xl p-6 flex flex-col transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Allocation</div>
+          <div class="flex-1 min-h-72 relative">
             <Pie v-if="pieData" :data="pieData" :options="pieOptions" />
           </div>
         </div>
 
-        <div class="card table-card">
-          <div class="card-title">Holdings</div>
-          <div class="table-scroll">
-            <table class="data-table">
+        <div class="bg-bg-card border border-border rounded-xl p-6 flex flex-col transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Holdings</div>
+          <div class="overflow-x-auto">
+            <table class="w-full text-sm">
               <thead>
                 <tr>
-                  <th>Symbol</th>
-                  <th>Value</th>
-                  <th>Weight</th>
-                  <th>Return</th>
-                  <th></th>
+                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Symbol</th>
+                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Value</th>
+                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Weight</th>
+                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Return</th>
+                  <th class="border-b border-border"></th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-for="asset in portfolio.assets" :key="asset.symbol">
-                  <td class="symbol-cell">{{ asset.symbol }}</td>
-                  <td>{{ fmtUsd(asset.value) }}</td>
-                  <td>{{ (asset.weight * 100).toFixed(1) }}%</td>
-                  <td>
-                    <span :class="asset.return >= 0 ? 'badge badge-green' : 'badge badge-red'">
+                  <td class="px-4 py-3 border-b border-border font-semibold text-accent">{{ asset.symbol }}</td>
+                  <td class="px-4 py-3 border-b border-border">{{ fmtUsd(asset.value) }}</td>
+                  <td class="px-4 py-3 border-b border-border">{{ (asset.weight * 100).toFixed(1) }}%</td>
+                  <td class="px-4 py-3 border-b border-border">
+                    <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                          :class="asset.return >= 0 ? 'bg-positive/15 text-positive' : 'bg-negative/15 text-negative'">
                       {{ fmtPct(asset.return) }}
                     </span>
                   </td>
-                  <td>
-                    <button class="btn-remove" @click="removeAsset(asset.symbol)" title="Remove">✕</button>
+                  <td class="px-4 py-3 border-b border-border">
+                    <button @click="removeAsset(asset.symbol)" title="Remove"
+                            class="bg-transparent border-none text-text-secondary cursor-pointer p-1 rounded-lg transition hover:text-negative hover:bg-negative/10">
+                      ✕
+                    </button>
                   </td>
                 </tr>
               </tbody>
@@ -202,20 +210,21 @@ function fmtUsd(val) {
       </div>
 
       <!-- Correlation matrix -->
-      <div v-if="correlation" class="card correlation-card">
-        <div class="card-title">Correlation Matrix</div>
-        <div class="table-scroll">
-          <table class="data-table corr-table">
+      <div v-if="correlation" class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+        <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Correlation Matrix</div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-sm">
             <thead>
               <tr>
-                <th></th>
-                <th v-for="sym in correlation.symbols" :key="sym">{{ sym }}</th>
+                <th class="px-4 py-3 border-b border-border"></th>
+                <th v-for="sym in correlation.symbols" :key="sym" class="px-4 py-3 text-center font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">{{ sym }}</th>
               </tr>
             </thead>
             <tbody>
               <tr v-for="(row, i) in correlation.matrix" :key="i">
-                <td class="symbol-cell">{{ correlation.symbols[i] }}</td>
+                <td class="px-4 py-3 border-b border-border font-semibold text-accent">{{ correlation.symbols[i] }}</td>
                 <td v-for="(val, j) in row" :key="j"
+                    class="px-4 py-3 border-b border-border text-center text-xs tabular-nums"
                     :style="{ background: corrColor(val) }">
                   {{ val.toFixed(2) }}
                 </td>
@@ -226,7 +235,7 @@ function fmtUsd(val) {
       </div>
     </template>
 
-    <div v-else class="loading">No portfolio data available.</div>
+    <div v-else class="flex items-center justify-center min-h-72 text-text-secondary">No portfolio data available.</div>
   </div>
 </template>
 
@@ -243,133 +252,3 @@ export default {
   }
 }
 </script>
-
-<style scoped>
-.summary-row {
-  margin-bottom: 1.5rem;
-}
-
-.content-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.5rem;
-  margin-bottom: 1.5rem;
-}
-
-@media (max-width: 900px) {
-  .content-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.pie-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.pie-wrapper {
-  flex: 1;
-  min-height: 280px;
-  position: relative;
-}
-
-.table-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.table-scroll {
-  overflow-x: auto;
-}
-
-.symbol-cell {
-  font-weight: 600;
-  color: var(--accent);
-}
-
-.correlation-card {
-  margin-top: 0;
-}
-
-.corr-table td {
-  text-align: center;
-  font-size: 0.85rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.corr-table th {
-  text-align: center;
-}
-
-.add-asset-card {
-  margin-bottom: 1.5rem;
-}
-
-.add-asset-form {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
-.add-asset-form input {
-  max-width: 260px;
-}
-
-.qty-input {
-  max-width: 100px !important;
-}
-
-.asset-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-}
-
-.asset-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.65rem;
-  border-radius: 999px;
-  background: var(--accent-muted);
-  color: var(--accent);
-  font-size: 0.82rem;
-  font-weight: 600;
-}
-
-.tag-qty {
-  color: var(--text-secondary);
-  font-weight: 400;
-}
-
-.tag-remove {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.9rem;
-  padding: 0 0.15rem;
-  line-height: 1;
-  transition: color var(--transition);
-}
-
-.tag-remove:hover {
-  color: var(--red);
-}
-
-.btn-remove {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font-size: 0.95rem;
-  padding: 0.2rem 0.4rem;
-  border-radius: var(--radius-sm);
-  transition: all var(--transition);
-}
-
-.btn-remove:hover {
-  color: var(--red);
-  background: rgba(255, 107, 107, 0.12);
-}
-</style>

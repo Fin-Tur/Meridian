@@ -3,79 +3,24 @@ import { RouterLink } from 'vue-router'
 </script>
 
 <template>
-  <nav class="navbar">
-    <div class="navbar-inner">
-      <RouterLink to="/" class="navbar-brand">
-        <span class="brand-icon">◈</span>
-        <span class="brand-text">Meridian</span>
+  <nav class="sticky top-0 z-50 bg-bg-primary/85 backdrop-blur-xl border-b border-border">
+    <div class="max-w-6xl mx-auto flex items-center justify-between px-6 h-15">
+      <RouterLink to="/" class="flex items-center gap-2 font-bold text-lg text-text-primary no-underline">
+        <span class="text-xl text-accent">◈</span>
+        <span>Meridian</span>
       </RouterLink>
 
-      <div class="navbar-links">
-        <RouterLink to="/" class="nav-link">My Portfolio</RouterLink>
-        <RouterLink to="/simulation" class="nav-link">Simulation</RouterLink>
-        <RouterLink to="/explorer" class="nav-link">Asset Explorer</RouterLink>
+      <div class="flex gap-1">
+        <RouterLink to="/" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary no-underline transition-all hover:text-text-primary hover:bg-accent-muted [&.router-link-exact-active]:text-accent [&.router-link-exact-active]:bg-accent-muted">
+          My Portfolio
+        </RouterLink>
+        <RouterLink to="/simulation" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary no-underline transition-all hover:text-text-primary hover:bg-accent-muted [&.router-link-exact-active]:text-accent [&.router-link-exact-active]:bg-accent-muted">
+          Simulation
+        </RouterLink>
+        <RouterLink to="/explorer" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary no-underline transition-all hover:text-text-primary hover:bg-accent-muted [&.router-link-exact-active]:text-accent [&.router-link-exact-active]:bg-accent-muted">
+          Asset Explorer
+        </RouterLink>
       </div>
     </div>
   </nav>
 </template>
-
-<style scoped>
-.navbar {
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background: rgba(15, 17, 23, 0.85);
-  backdrop-filter: blur(16px);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.navbar-inner {
-  max-width: 1200px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 1.5rem;
-  height: 60px;
-}
-
-.navbar-brand {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 700;
-  font-size: 1.15rem;
-  color: var(--text-primary);
-  text-decoration: none;
-}
-
-.brand-icon {
-  font-size: 1.4rem;
-  color: var(--accent);
-}
-
-.navbar-links {
-  display: flex;
-  gap: 0.25rem;
-}
-
-.nav-link {
-  padding: 0.5rem 1rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.9rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-decoration: none;
-  transition: all var(--transition);
-}
-
-.nav-link:hover {
-  color: var(--text-primary);
-  background: var(--accent-muted);
-}
-
-.nav-link.router-link-exact-active {
-  color: var(--accent);
-  background: var(--accent-muted);
-}
-</style>

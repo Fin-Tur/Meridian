@@ -102,128 +102,84 @@ function fmtPct(val) {
 </script>
 
 <template>
-  <div class="page">
-    <h1 class="page-title">Asset Explorer</h1>
+  <div class="max-w-6xl mx-auto px-6 py-8">
+    <h1 class="text-2xl font-bold mb-6">Asset Explorer</h1>
 
     <!-- Search -->
-    <div class="search-bar">
+    <div class="flex gap-3 mb-8">
       <input
         v-model="symbol"
         placeholder="Enter ticker symbol (e.g. AAPL)"
         @keydown.enter="search"
+        class="flex-1 max-w-sm bg-bg-secondary border border-border text-text-primary px-4 py-2.5 rounded-lg text-sm outline-none transition focus:border-accent"
       />
-      <button class="btn btn-primary" @click="search" :disabled="loading">
+      <button @click="search" :disabled="loading"
+              class="px-5 py-2.5 bg-accent text-white font-semibold text-sm rounded-lg transition hover:bg-accent-hover cursor-pointer disabled:opacity-50">
         {{ loading ? 'Loading…' : 'Search' }}
       </button>
     </div>
 
-    <div v-if="loading" class="loading">
+    <div v-if="loading" class="flex items-center justify-center min-h-72 text-text-secondary">
       <div class="spinner"></div>
       Fetching asset data…
     </div>
 
     <template v-else-if="asset">
-      <h2 class="asset-symbol">{{ asset.symbol }} <span class="currency-tag">{{ asset.currency }}</span></h2>
+      <h2 class="text-xl font-bold mb-5 flex items-center gap-3">
+        {{ asset.symbol }}
+        <span class="text-xs font-semibold px-2.5 py-1 rounded-full bg-accent-muted text-accent">{{ asset.currency }}</span>
+      </h2>
 
       <!-- Stats grid -->
-      <div class="grid-4 stat-row">
-        <div class="card">
-          <div class="card-title">Volatility</div>
-          <div class="stat-value">{{ (asset.volatility * 100).toFixed(2) }}%</div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Volatility</div>
+          <div class="text-2xl font-bold">{{ (asset.volatility * 100).toFixed(2) }}%</div>
         </div>
-        <div class="card">
-          <div class="card-title">Avg Log Return</div>
-          <div class="stat-value" :class="asset.avg_log_return >= 0 ? 'positive' : 'negative'">
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Avg Log Return</div>
+          <div class="text-2xl font-bold" :class="asset.avg_log_return >= 0 ? 'text-positive' : 'text-negative'">
             {{ fmtPct(asset.avg_log_return) }}
           </div>
         </div>
-        <div class="card">
-          <div class="card-title">Sharpe Ratio</div>
-          <div class="stat-value">{{ asset.sharpe_ratio?.toFixed(3) ?? '–' }}</div>
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Sharpe Ratio</div>
+          <div class="text-2xl font-bold">{{ asset.sharpe_ratio?.toFixed(3) ?? '–' }}</div>
         </div>
-        <div class="card">
-          <div class="card-title">Max Drawdown</div>
-          <div class="stat-value negative">{{ (asset.max_drawdown * 100).toFixed(2) }}%</div>
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Max Drawdown</div>
+          <div class="text-2xl font-bold text-negative">{{ (asset.max_drawdown * 100).toFixed(2) }}%</div>
         </div>
       </div>
 
-      <div class="grid-3 stat-row-2">
-        <div class="card">
-          <div class="card-title">YTD Return</div>
-          <div class="stat-value" :class="asset.ytd_returns >= 0 ? 'positive' : 'negative'">
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">YTD Return</div>
+          <div class="text-2xl font-bold" :class="asset.ytd_returns >= 0 ? 'text-positive' : 'text-negative'">
             {{ (asset.ytd_returns * 100).toFixed(2) }}%
           </div>
         </div>
-        <div class="card">
-          <div class="card-title">Skewness</div>
-          <div class="stat-value">{{ asset.skewness?.toFixed(4) ?? '–' }}</div>
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Skewness</div>
+          <div class="text-2xl font-bold">{{ asset.skewness?.toFixed(4) ?? '–' }}</div>
         </div>
-        <div class="card">
-          <div class="card-title">Kurtosis</div>
-          <div class="stat-value">{{ asset.kurtosis?.toFixed(4) ?? '–' }}</div>
+        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
+          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Kurtosis</div>
+          <div class="text-2xl font-bold">{{ asset.kurtosis?.toFixed(4) ?? '–' }}</div>
         </div>
       </div>
 
       <!-- Histogram of daily returns -->
-      <div v-if="histData" class="card hist-card">
-        <div class="card-title">Daily Return Distribution</div>
-        <div class="hist-wrapper">
+      <div v-if="histData" class="bg-bg-card border border-border rounded-xl p-6 flex flex-col transition hover:bg-bg-card-hover">
+        <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Daily Return Distribution</div>
+        <div class="min-h-90 relative">
           <Bar :data="histData" :options="histOptions" />
         </div>
       </div>
     </template>
 
-    <div v-else-if="searched && !loading" class="loading">
+    <div v-else-if="searched && !loading" class="flex items-center justify-center min-h-72 text-text-secondary">
       No data found for this symbol.
     </div>
   </div>
 </template>
-
-<style scoped>
-.search-bar {
-  display: flex;
-  gap: 0.75rem;
-  margin-bottom: 2rem;
-}
-
-.search-bar input {
-  flex: 1;
-  max-width: 400px;
-}
-
-.asset-symbol {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin-bottom: 1.25rem;
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.currency-tag {
-  font-size: 0.8rem;
-  font-weight: 600;
-  padding: 0.2rem 0.6rem;
-  border-radius: 999px;
-  background: var(--accent-muted);
-  color: var(--accent);
-}
-
-.stat-row {
-  margin-bottom: 1rem;
-}
-
-.stat-row-2 {
-  margin-bottom: 1.5rem;
-}
-
-.hist-card {
-  display: flex;
-  flex-direction: column;
-}
-
-.hist-wrapper {
-  min-height: 360px;
-  position: relative;
-}
-</style>
