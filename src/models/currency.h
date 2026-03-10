@@ -22,7 +22,7 @@ enum class currency{
     UNKNOWN
 };
 
-currency convert_curr_fstr(std::string currency_str){
+inline currency convert_curr_fstr(std::string currency_str){
     if(currency_str == "USD") return currency::USD;
     else if(currency_str == "EUR") return currency::EUR;
     else if(currency_str == "GBP") return currency::GBP;
@@ -42,3 +42,26 @@ currency convert_curr_fstr(std::string currency_str){
     return currency::UNKNOWN;
     
 }    
+
+inline std::string convert_curr_tostr(currency curr){
+    switch(curr){
+        case currency::USD: return "USD";
+        case currency::EUR: return "EUR";
+        case currency::GBP: return "GBP";
+        case currency::JPY: return "JPY";
+        case currency::CHF: return "CHF";
+        case currency::CAD: return "CAD";
+        case currency::AUD: return "AUD";
+        case currency::NZD: return "NZD";
+        case currency::CNY: return "CNY";
+        case currency::SEK: return "SEK";
+        case currency::NOK: return "NOK";
+        case currency::DKK: return "DKK";
+        case currency::ZAR: return "ZAR";
+        case currency::INR: return "INR";
+        case currency::BRL: return "BRL";
+        case currency::MXN: return "MXN";
+        default: return "UNKNOWN";
+    }
+}
+

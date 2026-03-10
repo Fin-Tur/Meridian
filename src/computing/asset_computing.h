@@ -113,4 +113,56 @@ namespace asset_compute {
         return llt.matrixL();
     }
 
+    double max_drawdown(const assets::asset& asset){
+        double max_drawdown = 0.0;
+        double peak = asset.data_points[0].adjclose;
+        for(size_t i = 1; i < asset.n_data_points; i++){
+            if(asset.data_points[i].adjclose > peak){
+                peak = asset.data_points[i].adjclose;
+            }
+            double drawdown = (peak - asset.data_points[i].adjclose) / peak;
+            if(drawdown > max_drawdown){
+                max_drawdown = drawdown;
+            }
+        }
+        return max_drawdown;
+    }
+
+    double sharpe_ratio(const assets::asset& asset, double risk_free_rate = 0.04){
+        double avg_return = avg_log_return(asset)*252; //Annualize
+        double vol = volatility(asset)*std::sqrt(252); //Annualize
+        return (avg_return - risk_free_rate) / vol;
+    }
+
+    double ytd_return(const assets::asset& asset){
+        std::time_t now = std::time(nullptr);
+        std::tm* now_tm = std::localtime(&now);
+        int current_year = now_tm->tm_year + 1900;
+
+        size_t start_idx = 0;
+        for(size_t i = 0; i < asset.n_data_points; i++){
+            std::time_t t = asset.data_points[i].timestamp;
+            std::tm* tm = std::localtime(&t);
+            if(tm->tm_year + 1900 == current_year){
+                start_idx = i;
+                break;
+            }
+        }
+
+        double start_price = asset.data_points[start_idx].adjclose;
+        double end_price   = asset.data_points[asset.n_data_points - 1].adjclose;
+        return (end_price - start_price) / start_price;
+    }
+
+    double skewness(const assets::asset& asset){
+        double avg = avg_log_return(asset);
+        double vol = volatility(asset);
+        double sum = 0.0;
+        for(size_t i = 1; i < asset.n_data_points; i++){
+            double log_ret = std::log(asset.data_points[i].adjclose / asset.data_points[i-1].adjclose);
+            sum += std::pow((log_ret - avg) / vol, 3.0);
+        }
+        return sum / (asset.n_data_points - 1);
+    }
+
 }

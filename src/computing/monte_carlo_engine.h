@@ -36,10 +36,13 @@ namespace monte_carlo {
         double var_99;
         double cvar_95;
         double cvar_99;
+        double avg;
     };
 
-    sim_preset generate_sim_preset(const std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days, double portfolio_value = 1000){
+    //Portfolio value in USD, weights should be in decimals (0.5 for 50%)
+    sim_preset generate_sim_preset(std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days, double portfolio_value = 1000){
         sim_preset preset;
+        asset_compute::unify_asset_currencies(assets);
         preset.n_sims = n_sims;
         preset.horizon_days = horizon_days;
         preset.portfolio_value = portfolio_value;
@@ -53,9 +56,8 @@ namespace monte_carlo {
         for (size_t i = 0; i < assets.size(); i++) {
             //preset.s_0.push_back(assets[i].data_points[assets[i].n_data_points - 1].adjclose);
             preset.s_0.push_back(1);
-            preset.sigma.push_back(asset_compute::volatility(assets[i]) * std::sqrt(252));//Annualize sqrt volality;
-            preset.mu.push_back(asset_compute::avg_log_return(assets[i]) * 252); //Annualize mean return linear
-            std::cout << "Mu: " << preset.mu[i] << " Sigma: " << preset.sigma[i] << "\n";
+            preset.sigma.push_back(asset_compute::volatility(assets[i]));
+            preset.mu.push_back(asset_compute::avg_log_return(assets[i])); 
             preset.df.push_back(asset_compute::dof_excess_kurtosis(assets[i]));
             preset.weight.push_back(weights[i]);
         }
@@ -80,19 +82,21 @@ namespace monte_carlo {
                 }
                 auto Eps = preset.cholesky_cov_mat * Z;
                 for(size_t j = 0; j < n_assets; ++j){
-                    S(j) *= std::exp((preset.mu[j] - 0.5 * preset.sigma[j] * preset.sigma[j])*(1.0/252) + preset.sigma[j] * Eps(j) * std::sqrt(1.0/252));
+                    S(j) *= std::exp((preset.mu[j] - 0.5 * preset.sigma[j] * preset.sigma[j])+ preset.sigma[j] * Eps(j));
                 }
             }
             result.final_portfolio_values.push_back((S.dot(Vec::Map(preset.weight.data(), preset.weight.size()))) * preset.portfolio_value);
         }
 
-        std::vector<double> sorted = result.final_portfolio_values;
-        std::sort(sorted.begin(), sorted.end());
 
-        std::cout << "Beginning Portfolio Value: " << preset.portfolio_value << "\n";
-        std::cout << "Ending Portfolio Value (Median): " << sorted[sorted.size() / 2] << "\n";
-        std::cout << "Ending Portfolio Value (Highest): " << sorted[sorted.size()-1] << "\n";
-        std::cout << "Ending Portfolio Value (Lowest): " << sorted[0] << "\n";
+        std::sort(result.final_portfolio_values.begin(), result.final_portfolio_values.end());
+
+        result.var_95 = portfolio_value - result.final_portfolio_values[static_cast<size_t>(preset.n_sims * 0.05)];
+        result.var_99 = portfolio_value - result.final_portfolio_values[static_cast<size_t>(preset.n_sims * 0.01)];
+        result.cvar_95 = portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.05), 0.0) / (preset.n_sims * 0.05);
+        result.cvar_99 = portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.01), 0.0) / (preset.n_sims * 0.01);
+        result.avg = std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.end(), 0.0) / preset.n_sims;
+
 
         return result;
     }

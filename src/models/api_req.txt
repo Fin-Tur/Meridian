@@ -36,3 +36,15 @@ COINGEEK
 ]
 
 [timestamp_ms, open, high, low, close]
+
+
+SERVER SIMULATE REQUEST
+{
+    "portfolio_value": 10000,
+    "horizon_days": 252,
+    "n_sims": 10000,
+    "assets": [
+        { "ticker": "AAPL",    "type": "stock",  "weight": 0.5 },
+        { "ticker": "bitcoin", "type": "crypto", "weight": 0.5 }
+    ]
+}

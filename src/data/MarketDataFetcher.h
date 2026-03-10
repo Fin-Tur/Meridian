@@ -83,4 +83,22 @@ namespace data_fetcher {
         return a;
     }
 
+    double fetch_fx_rate(const currency& from_currency, const currency& to_currency = &currency::USD) {
+        httplib::SSLClient client("query1.finance.yahoo.com");
+        client.set_default_headers({{"User-Agent", "Mozilla/5.0"}});
+
+        std::string ticker = convert_curr_tostr(from_currency) + convert_curr_tostr(to_currency) + "=X";
+        std::string path = "/v8/finance/chart/"+ticker+"?range=1d&interval=1de";
+
+        auto res = client.Get(path.c_str());
+
+        if (!res || res->status != 200) {
+            return -1.0;
+        }
+
+        auto j = nlohmann::json::parse(res->body);
+        double rate = j["chart"]["result"][0]["meta"]["regularMarketPrice"].get<double>();
+        return -1.0;
+    }
+
 }
