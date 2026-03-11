@@ -91,15 +91,18 @@ namespace asset_compute {
         return std::sqrt(volatility_sum / (asset.n_data_points - 1));
     }
 
-    double dof_excess_kurtosis(const assets::asset& asset){
+    double excess_kurtosis(const assets::asset& asset){
         double avg_return = avg_log_return(asset);
         double vol = volatility(asset);
         double kurtosis_sum = 0.0;
         for(size_t i = 1; i < asset.n_data_points; i++){
             kurtosis_sum += std::pow((asset.data_points[i].adjclose - avg_return) / vol, 4);
         }
-         kurtosis_sum = kurtosis_sum / (asset.n_data_points - 1) - 3.0;
+         return kurtosis_sum / (asset.n_data_points - 1) - 3.0; //Excess kurtosis is kurtosis - 3
+    }
 
+    double dof_excess_kurtosis(const assets::asset& asset){
+        double kurtosis_sum = excess_kurtosis(asset);
          return (4 + 6/kurtosis_sum) > 0 ? kurtosis_sum : std::numeric_limits<double>::infinity(); 
          //Formula to get dof for student-t distribution based on excess kurtosis, if the result is negative 
          //we return infinity which corresponds to a normal distribution

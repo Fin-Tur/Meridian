@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include "currency.h"
+#include "../data/MarketDataFetcher.h"
 
 namespace assets {
     
@@ -76,19 +77,5 @@ namespace assets {
         }
     };
 
-    void unify_asset_currencies(std::vector<asset>& assets, currency target_currency){
-        std::map<currency, double> fx_cache; // Cache for exchange rates to avoid redundant API calls
-        for(auto& asset : assets){
-            if(asset.currency != target_currency){
-                auto [it, inserted] = fx_cache.try_emplace(asset.currency, data_fetcher::fetch_fx_rate(asset.currency, target_currency));
-                if(it.second == -1) throw std::runtime_error("Failed to fetch exchange rate for currency conversion.");
-                for(size_t i = 0; i < asset.n_data_points; i++){
-                    asset.data_points[i].low *= it.second;
-                    asset.data_points[i].high *= it.second;
-                    asset.data_points[i].adjclose *= it.second;
-                }
-                asset.currency = target_currency;
-            }
-        }
-    }
+
 }

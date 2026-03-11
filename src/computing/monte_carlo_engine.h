@@ -42,7 +42,7 @@ namespace monte_carlo {
     //Portfolio value in USD, weights should be in decimals (0.5 for 50%)
     sim_preset generate_sim_preset(std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days, double portfolio_value = 1000){
         sim_preset preset;
-        asset_compute::unify_asset_currencies(assets);
+        data_fetcher::unify_asset_currencies(assets, currency::USD);
         preset.n_sims = n_sims;
         preset.horizon_days = horizon_days;
         preset.portfolio_value = portfolio_value;
@@ -91,10 +91,10 @@ namespace monte_carlo {
 
         std::sort(result.final_portfolio_values.begin(), result.final_portfolio_values.end());
 
-        result.var_95 = portfolio_value - result.final_portfolio_values[static_cast<size_t>(preset.n_sims * 0.05)];
-        result.var_99 = portfolio_value - result.final_portfolio_values[static_cast<size_t>(preset.n_sims * 0.01)];
-        result.cvar_95 = portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.05), 0.0) / (preset.n_sims * 0.05);
-        result.cvar_99 = portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.01), 0.0) / (preset.n_sims * 0.01);
+        result.var_95 = preset.portfolio_value - result.final_portfolio_values[static_cast<size_t>(preset.n_sims * 0.05)];
+        result.var_99 = preset.portfolio_value - result.final_portfolio_values[static_cast<size_t>(preset.n_sims * 0.01)];
+        result.cvar_95 = preset.portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.05), 0.0) / (preset.n_sims * 0.05);
+        result.cvar_99 = preset.portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.01), 0.0) / (preset.n_sims * 0.01);
         result.avg = std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.end(), 0.0) / preset.n_sims;
 
 

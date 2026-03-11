@@ -2,6 +2,7 @@
 #include "data/MarketDataFetcher.h"
 #include "computing/asset_computing.h"
 #include "computing/monte_carlo_engine.h"
+#include "api/server.h"
 
 int main() {
     /*std::string symbol = "AAPL";
@@ -18,9 +19,7 @@ int main() {
     auto preset = monte_carlo::generate_sim_preset(assets, weights, 10000, 252);
     auto res = monte_carlo::run_simulation(preset);*/
 
-    auto res = data_fetcher::fetch_fx_rate(convert_curr_fstr("USD"), convert_curr_fstr("EUR"));
-    std::cout << "USD to EUR exchange rate: " << res << std::endl;
-
-
+    server s = server();
+    s.run("localhost", 8080);
     return 0;
 }

@@ -8,6 +8,8 @@
 #include "../models/assets.h"
 #include "../data/MarketDataFetcher.h"
 #include "../computing/monte_carlo_engine.h"
+#include "../computing/asset_computing.h"
+#include "../models/currency.h"
 
 //========= DEV ONLY ==========
 //Python fast API to come
@@ -81,8 +83,9 @@ class server {
             std::vector<int> histogramm_bins(50);
             for(auto& a : result.final_portfolio_values){
                 int bin_index = std::min(static_cast<int>((a - result.final_portfolio_values.front()) / bin_width), 49);
-                bins[bin_index]++;
+                histogramm_bins[bin_index]++;
             }
+            response_json["histogram_bins"] = histogramm_bins;
             res.set_content(response_json.dump(), "application/json");
 
             } catch(const std::exception& e) {
@@ -93,6 +96,7 @@ class server {
         });
 
         svr.Post("/correlation", [](const httplib::Request& req, httplib::Response& res){
+            std::cout << "Received correlation request with body: " << req.body << std::endl;
             try{
                 auto body = nlohmann::json::parse(req.body);
                 std::vector<assets::asset> fetched_assets;
@@ -129,7 +133,7 @@ class server {
             }
         });
 
-        svr.Post("/asset" [](const httplib::Request& req, httplib::Response& res){
+        svr.Post("/asset", [](const httplib::Request& req, httplib::Response& res){
             try{
                 auto body = nlohmann::json::parse(req.body);
                 std::string ticker = body.at("ticker").get<std::string>();
@@ -143,14 +147,17 @@ class server {
                     fetched = data_fetcher::fetch_stock(ticker);
                 }
 
-                std::vector<double> adj_closes(fetched.data_points, fetched.data_points + fetched.n_data_points);
+                std::vector<double> adj_closes;
+                adj_closes.reserve(fetched.n_data_points);
+                for (int i = 0; i < fetched.n_data_points; i++)
+                    adj_closes.push_back(fetched.data_points[i].adjclose);
 
                 nlohmann::json response_json;
                 response_json["symbol"] = fetched.symbol;
                 response_json["currency"] = fetched.currency;
                 response_json["adj_closes"] = adj_closes;
                 response_json["volatility"] = asset_compute::volatility(fetched) * sqrt(252); //Annualized volatility
-                response_json["avg_return"] = asset_compute::average_log_return(fetched) * 252; //Annualized average log return
+                response_json["avg_log_return"] = asset_compute::avg_log_return(fetched) * 252; //Annualized average log return
                 response_json["sharpe_ratio"] = asset_compute::sharpe_ratio(fetched);
                 response_json["max_drawdown"] = asset_compute::max_drawdown(fetched);
                 response_json["ytd_return"] = asset_compute::ytd_return(fetched);
@@ -160,6 +167,60 @@ class server {
                 res.set_content(response_json.dump(), "application/json");
 
             } catch(const std::exception& e) {
+                res.status = 400;
+                res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+                return;
+            }
+        });
+
+        svr.Post("/portfolio", [](const httplib::Request& req, httplib::Response& res){
+            std::cout << "Received portfolio request with body: " << req.body << std::endl;
+            try{
+                auto body = nlohmann::json::parse(req.body);
+                std::vector<assets::asset> fetched_assets;
+                std::vector<double> amounts;
+
+                for (const auto& a : body.at("assets")) {
+                    std::string ticker = a.at("ticker").get<std::string>();
+                    std::string type   = a.at("type").get<std::string>();
+                    double amount      = a.at("amount").get<double>();
+
+                    assets::asset fetched;
+                    if (type == "crypto") {
+                        std::string coinId = ticker;
+                        fetched = data_fetcher::fetch_crypto(coinId, ticker);
+                    } else {
+                        fetched = data_fetcher::fetch_stock(ticker);
+                    }
+
+                    if (fetched.n_data_points == 0) {
+                        throw std::runtime_error("Failed to fetch market data for: " + ticker);
+                    }
+
+                    fetched_assets.push_back(fetched);
+                    amounts.push_back(amount);
+                }
+                std::cout << "Fetched " << fetched_assets.size() << " assets for portfolio valuation." << std::endl;
+                nlohmann::json response_json;
+                double portfolio_value = 0.0;
+
+                for(size_t i = 0; i < fetched_assets.size(); i++){
+                    portfolio_value += amounts[i] * fetched_assets[i].data_points[fetched_assets[i].n_data_points - 1].adjclose;
+                }
+                std::vector<std::pair<std::string, double>> weights;
+                for(size_t i = 0; i < fetched_assets.size(); i++){
+                    weights.push_back({fetched_assets[i].symbol, (amounts[i] * fetched_assets[i].data_points[fetched_assets[i].n_data_points - 1].adjclose) / portfolio_value});
+                }
+                response_json["portfolio_value"] = portfolio_value;
+                nlohmann::json weights_json;
+                for (const auto& [symbol, w] : weights) {
+                    weights_json[symbol] = w;
+                }
+                response_json["weights"] = weights_json;
+                res.set_content(response_json.dump(), "application/json");
+
+            } catch(const std::exception& e) {
+                std::cout << "Error processing portfolio request: " << e.what() << std::endl;
                 res.status = 400;
                 res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
                 return;

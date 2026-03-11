@@ -1,5 +1,8 @@
 #pragma once
 #define CPPHTTPLIB_OPENSSL_SUPPORT
+#include <map>
+#include <vector>
+#include <stdexcept>
 #include "../thirdparty/httplib.h"
 #include "../thirdparty/json.hpp"
 #include "../models/assets.h"
@@ -32,7 +35,7 @@ namespace data_fetcher {
         a.symbol = symbol;
         a.n_data_points = closes.size();
         a.data_points = new assets::data_point[a.n_data_points];
-        a.currency = j["chart"]["result"][0]["meta"]["currency"].get<std::string>();
+        a.currency = convert_curr_fstr(j["chart"]["result"][0]["meta"]["currency"].get<std::string>());
 
         for (size_t i = 0; i < closes.size(); i++) {
             if (closes[i].is_null() || highs[i].is_null() || lows[i].is_null()) continue;
@@ -68,7 +71,7 @@ namespace data_fetcher {
         a.symbol = symbol;
         a.n_data_points = prices.size();
         a.data_points = new assets::data_point[a.n_data_points];
-        a.currency = "USD";
+        a.currency = convert_curr_fstr("USD"); //Cryptos are typically priced in USD
 
         for (size_t i = 0; i < prices.size(); i++) {
             if (prices[i][1].is_null()) continue;
@@ -83,12 +86,12 @@ namespace data_fetcher {
         return a;
     }
 
-    double fetch_fx_rate(const currency& from_currency, const currency& to_currency = &currency::USD) {
+    double fetch_fx_rate(const currency& from_currency, currency to_currency = currency::USD) {
         httplib::SSLClient client("query1.finance.yahoo.com");
         client.set_default_headers({{"User-Agent", "Mozilla/5.0"}});
 
         std::string ticker = convert_curr_tostr(from_currency) + convert_curr_tostr(to_currency) + "=X";
-        std::string path = "/v8/finance/chart/"+ticker+"?range=1d&interval=1de";
+        std::string path = "/v8/finance/chart/"+ticker+"?range=1d&interval=1d";
 
         auto res = client.Get(path.c_str());
 
@@ -98,7 +101,23 @@ namespace data_fetcher {
 
         auto j = nlohmann::json::parse(res->body);
         double rate = j["chart"]["result"][0]["meta"]["regularMarketPrice"].get<double>();
-        return -1.0;
+        return rate;
+    }
+
+    void unify_asset_currencies(std::vector<assets::asset>& asset_list, currency target_currency){
+        std::map<currency, double> fx_cache; // Cache for exchange rates to avoid redundant API calls
+        for(auto& asset : asset_list){
+            if(asset.currency != target_currency){
+                auto [it, inserted] = fx_cache.try_emplace(asset.currency, fetch_fx_rate(asset.currency, target_currency));
+                if(it->second == -1) throw std::runtime_error("Failed to fetch exchange rate for currency conversion.");
+                for(size_t i = 0; i < asset.n_data_points; i++){
+                    asset.data_points[i].low *= it->second;
+                    asset.data_points[i].high *= it->second;
+                    asset.data_points[i].adjclose *= it->second;
+                }
+                asset.currency = target_currency;
+            }
+        }
     }
 
 }
