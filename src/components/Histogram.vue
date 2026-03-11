@@ -33,7 +33,7 @@ const props = defineProps({
   type: {
     type: String,
     default: 'absolute',
-    validator: v => ['percent', 'absolute'].includes(v)
+    validator: v => ['percent', 'absolute', 'price', 'distribution'].includes(v)
   },
   title: {
     type: String,
@@ -43,23 +43,22 @@ const props = defineProps({
 
 const chartData = computed(() => {
   const vals = props.values ?? []
-
+  console.log('Histogram labels:', props.labels)
   const resolvedLabels = props.labels
     ? props.labels
     : vals.map((_, i) => String(i))
-
   return {
     labels: resolvedLabels,
     datasets: [{
-      label: 'Frequency',
+      label: props.type.includes('distribution') ? 'Frequency' : props.type.includes('price') ? 'Price' : 'Value',
       data: vals,
-      backgroundColor: vals.map(v =>
-        props.type === 'percent' && v < 0
+      backgroundColor: resolvedLabels.map(v =>
+        props.type.includes('percent') && v < 0
           ? 'rgba(255,107,107,0.7)'
           : 'rgba(0,206,201,0.7)'
       ),
-      borderColor: vals.map(v =>
-        props.type === 'percent' && v < 0
+      borderColor: resolvedLabels.map(v =>
+        props.type.includes('percent') && v < 0
           ? '#ff6b6b'
           : '#00cec9'
       ),

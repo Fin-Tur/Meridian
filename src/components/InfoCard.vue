@@ -23,7 +23,7 @@ const props = defineProps({
 
 const text = computed(() => {
   let str = ''
-  if(props.type.includes("beneficial") && props.val >= 0){
+  if(props.type.includes("beneficial") && props.vals >= 0){
     str += '+'
   }
   if(props.type.includes("percentile")){

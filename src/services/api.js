@@ -1,6 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL
 
 import { checkResponse } from '@/services/utils.js'
+import { usePortfolioStore } from '@/stores/counter'
 
 async function api_call(endpoint, method = 'GET', body = null) {
   try {
@@ -27,95 +28,115 @@ async function api_call(endpoint, method = 'GET', body = null) {
     console.error('Error during API call:', error) //Debug
     return null
   }
+ 
 }
 
-// ── Dummy data helpers ──
-function randomNormal(mean = 0, std = 1) {
-  const u1 = Math.random()
-  const u2 = Math.random()
-  return mean + std * Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2)
+// ── Helpers ──
+
+function lastOf(arr, fallback = 0) {
+  return arr && arr.length > 0 ? arr[arr.length - 1] : fallback
 }
 
-function delay(ms = 200) {
-  return new Promise(r => setTimeout(r, ms))
+// Computes daily log returns from an array of prices
+function computeLogReturns(closes) {
+  if (!closes || closes.length < 2) return []
+  return closes.slice(1).map((p, i) => Math.log(p / closes[i]))
 }
 
-// Runs monte carlo simulation, returns 50 bin values (for a histogram), binwidth, avg return and var95, var99, cvar95, cvar99, min, max
+// Runs monte carlo simulation for the current portfolio.
+// Returns histogram bins, labels, avg_return, min, max, var95, var99, cvar95, cvar99.
 export async function fetch_simulation() {
-  // TODO: replace with  return await api_call('/simulation')
-  await delay(300)
-  const bins = []
-  for (let i = 0; i < 50; i++) {
-    bins.push(Math.max(0, Math.round(400 * Math.exp(-0.5 * Math.pow((i - 25) / 8, 2)) + randomNormal(0, 15))))
-  }
+  const store = usePortfolioStore()
+  const portfolioAssets = store.assets
+
+  if (!portfolioAssets.length) return null
+
+  const assetDataList = await Promise.all(
+    portfolioAssets.map(a => api_call('/asset', 'POST', { ticker: a.symbol, type: a.type }))
+  )
+
+  const enriched = portfolioAssets.map((a, i) => {
+    const closes = assetDataList[i]?.adj_closes ?? []
+    const price = lastOf(closes)
+    return { symbol: a.symbol, type: a.type || 'stock', totalValue: price * a.quantity }
+  })
+
+
+  const raw = await api_call('/simulate', 'POST', {
+    portfolio_value,
+    horizon_days: 252,
+    n_simulations: 10000,
+    assets,
+  })
+
+  if (!raw) return null
+
+  // Convert absolute dollar values to fractional returns relative to starting portfolio value
+  const toReturn = val => portfolio_value > 0 ? (val - portfolio_value) / portfolio_value : 0
+
+  // Build histogram labels from min value + bin_width steps
+  const labels = raw.histogram_bins.map((_, i) =>
+    '$' + (raw.min + i * raw.bin_width).toLocaleString(undefined, { maximumFractionDigits: 0 })
+  )
+
   return {
-    bins,
-    bin_width: 1.2,
-    avg_return: 7.42,
-    var95: -12.35,
-    var99: -18.71,
-    cvar95: -15.88,
-    cvar99: -22.14,
-    min: -32.5,
-    max: 45.8,
+    avg_return: toReturn(raw.avg),
+    min: toReturn(raw.min),
+    max: toReturn(raw.max),
+    var95: raw.var_95,
+    var99: raw.var_99,
+    cvar95: raw.cvar_95,
+    cvar99: raw.cvar_99,
+    bins: raw.histogram_bins,
+    labels,
   }
+
 }
 
-// Fetches correlation data for the assets in the portfolio, returns a matrix of correlation values and a list of asset symbols
+// Fetches correlation matrix for the current portfolio assets.
+// Returns { symbols: string[], matrix: number[][] }
 export async function fetch_correlation() {
-  // TODO: replace with  return await api_call('/correlation')
-  await delay(200)
-  const symbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA']
-  const n = symbols.length
-  const matrix = []
-  for (let i = 0; i < n; i++) {
-    const row = []
-    for (let j = 0; j < n; j++) {
-      if (i === j) row.push(1.0)
-      else if (j < i) row.push(matrix[j][i])
-      else row.push(parseFloat((Math.random() * 1.4 - 0.2).toFixed(2)))
-    }
-    matrix.push(row)
-  }
+  const store = usePortfolioStore()
+  const portfolioAssets = store.assets
+
+  if (!portfolioAssets.length) return null
+
+  const assets = portfolioAssets.map(a => ({ ticker: a.symbol, type: a.type || 'stock' }))
+  const raw = await api_call('/correlation', 'POST', { assets })
+
+  if (!raw) return null
+
+  const symbols = Object.keys(raw)
+  const matrix = symbols.map(s1 => symbols.map(s2 => raw[s1][s2]))
+
   return { symbols, matrix }
 }
 
-// Fetches portfolio infos like total value, individual asset values, returns, etc. Returns a list of assets with their symbol, value, return, and weight in the portfolio aswell as their correlation between assets
+// Fetches portfolio data for all assets in the store.
+// Returns { total_value, total_return, assets: [{ symbol, value, return, weight }] }
 export async function fetch_portfolio() {
-  // TODO: replace with  return await api_call('/portfolio')
-  await delay(250)
-  const assets = [
-    { symbol: 'AAPL',  value: 28500,  return: 12.4,  weight: 0.30 },
-    { symbol: 'MSFT',  value: 22100,  return: 8.7,   weight: 0.23 },
-    { symbol: 'GOOGL', value: 17800,  return: -3.2,  weight: 0.19 },
-    { symbol: 'AMZN',  value: 15200,  return: 15.1,  weight: 0.16 },
-    { symbol: 'TSLA',  value: 11400,  return: -7.8,  weight: 0.12 },
-  ]
-  const total_value = assets.reduce((s, a) => s + a.value, 0)
-  const total_return = assets.reduce((s, a) => s + a.return * a.weight, 0)
-  return { total_value, total_return, assets }
+  const store = usePortfolioStore()
+  const assets = store.assets
+
+  if (!assets.length) return { total_value: 0, total_return: 0, assets: [] }
+
+  const res = await api_call('/portfolio', 'POST', {
+    assets: assets.map(a => ({ ticker: a.symbol, amount: a.quantity, type: a.type}))
+  })
+  
+  return res
 }
 
-// Fetches asset data : symbol, currency, adj_closes, volatility, avg_log_return, sharpe_ratio, max_drawdown, ytd_returns, skewness, kurtosis
-export async function fetch_asset(symbol) {
-  // TODO: replace with  return await api_call(`/asset?symbol=${encodeURIComponent(symbol)}`)
-  await delay(350)
-  const closes = []
-  let price = 150 + Math.random() * 100
-  for (let i = 0; i < 252; i++) {
-    price *= 1 + randomNormal(0.0003, 0.018)
-    closes.push(parseFloat(price.toFixed(2)))
-  }
+// Fetches data for a single asset by ticker symbol.
+// Returns server fields plus ytd_returns alias and computed log_returns.
+export async function fetch_asset(symbol, type = 'stock') {
+  const raw = await api_call('/asset', 'POST', { ticker: symbol.toUpperCase(), type })
+
+  if (!raw) return null
+
   return {
-    symbol: symbol.toUpperCase(),
-    currency: 'USD',
-    adj_closes: closes,
-    volatility: 0.18 + Math.random() * 0.12,
-    avg_log_return: 0.0003 + Math.random() * 0.001,
-    sharpe_ratio: 0.4 + Math.random() * 1.2,
-    max_drawdown: -(0.08 + Math.random() * 0.25),
-    ytd_returns: -0.05 + Math.random() * 0.35,
-    skewness: -0.3 + Math.random() * 0.6,
-    kurtosis: 2.5 + Math.random() * 3,
+    ...raw,
+    ytd_returns: raw.ytd_return,                    // alias for view compatibility
+    log_returns: computeLogReturns(raw.adj_closes),  // derived for histogram
   }
 }

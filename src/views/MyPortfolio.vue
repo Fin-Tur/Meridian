@@ -11,7 +11,6 @@ ChartJS.register(ArcElement, Tooltip, Legend)
 
 const store = usePortfolioStore()
 
-const portfolio = ref(null)
 const correlation = ref(null)
 const loading = ref(true)
 
@@ -22,7 +21,10 @@ const newQuantity = ref(1)
 async function loadData() {
   loading.value = true
   const [p, c] = await Promise.all([fetch_portfolio(), fetch_correlation()])
-  portfolio.value = p
+  store.setPortfolioValue(p.portfolio_value)
+  for(const weight of p.weights){
+    store.setWeight(weight[0], weight[1])
+  }
   correlation.value = c
   loading.value = false
 }
@@ -50,12 +52,12 @@ const pieColors = [
 ]
 
 const pieData = computed(() => {
-  if (!portfolio.value?.assets) return null
+  if (!store.assets.length) return null
   return {
-    labels: portfolio.value.assets.map(a => a.symbol),
+    labels: store.assets.map(a => a.symbol),
     datasets: [{
-      data: portfolio.value.assets.map(a => a.value),
-      backgroundColor: pieColors.slice(0, portfolio.value.assets.length),
+      data: store.assets.map(a => a.value),
+      backgroundColor: pieColors.slice(0, store.assets.length),
       borderColor: 'transparent',
       hoverOffset: 8,
     }],
@@ -141,23 +143,18 @@ function fmtUsd(val) {
       Loading portfolio…
     </div>
 
-    <template v-else-if="portfolio">
+    <template v-else-if="store.assets.length">
       <!-- Summary row -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
           <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Total Value</div>
-          <div class="text-2xl font-bold">{{ fmtUsd(portfolio.total_value) }}</div>
+          <div class="text-2xl font-bold">{{ fmtUsd(store.portfolio_value) }}</div>
         </div>
         <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
           <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Assets</div>
-          <div class="text-2xl font-bold">{{ portfolio.assets?.length ?? 0 }}</div>
+          <div class="text-2xl font-bold">{{ store.assets.length }}</div>
         </div>
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Portfolio Return</div>
-          <div class="text-2xl font-bold" :class="portfolio.total_return >= 0 ? 'text-positive' : 'text-negative'">
-            {{ fmtPct(portfolio.total_return) }}
-          </div>
-        </div>
+
       </div>
 
       <!-- Pie chart + Table -->
@@ -183,10 +180,10 @@ function fmtUsd(val) {
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="asset in portfolio.assets" :key="asset.symbol">
+                <tr v-for="asset in store.assets" :key="asset.symbol">
                   <td class="px-4 py-3 border-b border-border font-semibold text-accent">{{ asset.symbol }}</td>
                   <td class="px-4 py-3 border-b border-border">{{ fmtUsd(asset.value) }}</td>
-                  <td class="px-4 py-3 border-b border-border">{{ (asset.weight * 100).toFixed(1) }}%</td>
+                  <td class="px-4 py-3 border-b border-border">{{ (store.weights[asset.symbol] * 100).toFixed(1) }}%</td>
                   <td class="px-4 py-3 border-b border-border">
                     <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold"
                           :class="asset.return >= 0 ? 'bg-positive/15 text-positive' : 'bg-negative/15 text-negative'">
