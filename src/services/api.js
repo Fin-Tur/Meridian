@@ -52,27 +52,20 @@ export async function fetch_simulation() {
   if (!portfolioAssets.length) return null
 
   const assetDataList = await Promise.all(
-    portfolioAssets.map(a => api_call('/asset', 'POST', { ticker: a.symbol, type: a.type }))
+    portfolioAssets.map(a => ({ ticker: a.symbol, type: a.type, weight: store.weights[a.symbol] }))
   )
 
-  const enriched = portfolioAssets.map((a, i) => {
-    const closes = assetDataList[i]?.adj_closes ?? []
-    const price = lastOf(closes)
-    return { symbol: a.symbol, type: a.type || 'stock', totalValue: price * a.quantity }
-  })
-
-
   const raw = await api_call('/simulate', 'POST', {
-    portfolio_value,
+    portfolio_value: store.portfolio_value,
     horizon_days: 252,
-    n_simulations: 10000,
-    assets,
+    n_simulations: 1000,
+    assets: assetDataList,
   })
 
   if (!raw) return null
 
   // Convert absolute dollar values to fractional returns relative to starting portfolio value
-  const toReturn = val => portfolio_value > 0 ? (val - portfolio_value) / portfolio_value : 0
+  const toReturn = val => store.portfolio_value > 0 ? (val - store.portfolio_value) / store.portfolio_value : 0
 
   // Build histogram labels from min value + bin_width steps
   const labels = raw.histogram_bins.map((_, i) =>
@@ -80,7 +73,7 @@ export async function fetch_simulation() {
   )
 
   return {
-    avg_return: toReturn(raw.avg),
+    avg_return: raw.avg,
     min: toReturn(raw.min),
     max: toReturn(raw.max),
     var95: raw.var_95,
@@ -88,6 +81,7 @@ export async function fetch_simulation() {
     cvar95: raw.cvar_95,
     cvar99: raw.cvar_99,
     bins: raw.histogram_bins,
+    bin_width: raw.bin_width,
     labels,
   }
 
@@ -108,7 +102,7 @@ export async function fetch_correlation() {
 
   const symbols = Object.keys(raw)
   const matrix = symbols.map(s1 => symbols.map(s2 => raw[s1][s2]))
-
+  console.log('Correlation matrix:', { symbols, matrix }) // Debug
   return { symbols, matrix }
 }
 
@@ -123,7 +117,6 @@ export async function fetch_portfolio() {
   const res = await api_call('/portfolio', 'POST', {
     assets: assets.map(a => ({ ticker: a.symbol, amount: a.quantity, type: a.type}))
   })
-  
   return res
 }
 

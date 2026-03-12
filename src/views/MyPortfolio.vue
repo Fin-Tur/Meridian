@@ -6,6 +6,8 @@ import { fetch_portfolio, fetch_correlation } from '@/services/api.js'
 import { usePortfolioStore } from '@/stores/counter.js'
 import InfoCard from '@/components/InfoCard.vue'
 import SearchBar from '@/components/SearchBar.vue'
+import PieChart from '@/components/PieChart.vue'
+import DataTable from '@/components/DataTable.vue'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 
@@ -45,58 +47,6 @@ function removeAsset(symbol) {
   loadData()
 }
 
-const pieColors = [
-  '#6c5ce7', '#00cec9', '#fd79a8', '#feca57',
-  '#a29bfe', '#55efc4', '#fab1a0', '#74b9ff',
-  '#dfe6e9', '#81ecec', '#ff7675', '#fdcb6e',
-]
-
-const pieData = computed(() => {
-  if (!store.assets.length) return null
-  return {
-    labels: store.assets.map(a => a.symbol),
-    datasets: [{
-      data: store.assets.map(a => a.value),
-      backgroundColor: pieColors.slice(0, store.assets.length),
-      borderColor: 'transparent',
-      hoverOffset: 8,
-    }],
-  }
-})
-
-const pieOptions = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: {
-    legend: {
-      position: 'right',
-      labels: {
-        color: '#8b8fa3',
-        padding: 16,
-        usePointStyle: true,
-        pointStyleWidth: 10,
-        font: { size: 13 },
-      },
-    },
-    tooltip: {
-      backgroundColor: '#1e2130',
-      titleColor: '#e4e6f0',
-      bodyColor: '#8b8fa3',
-      borderColor: '#2a2d3e',
-      borderWidth: 1,
-      cornerRadius: 8,
-      callbacks: {
-        label: ctx => {
-          const val = ctx.parsed
-          const total = ctx.dataset.data.reduce((a, b) => a + b, 0)
-          const pct = ((val / total) * 100).toFixed(1)
-          return ` ${ctx.label}: $${val.toLocaleString()} (${pct}%)`
-        }
-      }
-    }
-  }
-}
-
 function fmtPct(val) {
   if (val == null) return '–'
   return (val >= 0 ? '+' : '') + val.toFixed(2) + '%'
@@ -105,6 +55,46 @@ function fmtPct(val) {
 function fmtUsd(val) {
   if (val == null) return '–'
   return '$' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+}
+
+/* ── Holdings table config ── */
+const holdingsColumns = [
+  { key: 'symbol', label: 'Symbol', cellClass: 'font-semibold text-accent' },
+  { key: 'value',  label: 'Value' },
+  { key: 'weight', label: 'Weight' },
+  { key: 'return', label: 'Return' },
+]
+
+/* ── Correlation table config ── */
+const corrColumns = computed(() => {
+  if (!correlation.value) return []
+  return [
+    { key: '_label', label: '', cellClass: 'font-semibold text-accent' },
+    ...correlation.value.symbols.map(sym => ({
+      key: sym,
+      label: sym,
+      align: 'center',
+      cellClass: 'text-xs tabular-nums',
+      cellStyle: (val) => ({ background: corrColor(val) }),
+    })),
+  ]
+})
+
+const corrRows = computed(() => {
+  if (!correlation.value) return []
+  return correlation.value.matrix.map((row, i) => {
+    const obj = { _label: correlation.value.symbols[i] }
+    correlation.value.symbols.forEach((sym, j) => { obj[sym] = row[j] })
+    return obj
+  })
+})
+
+function corrColor(val) {
+  if (val >= 0.8) return 'rgba(0,206,201,0.25)'
+  if (val >= 0.4) return 'rgba(0,206,201,0.12)'
+  if (val <= -0.4) return 'rgba(255,107,107,0.12)'
+  if (val <= -0.8) return 'rgba(255,107,107,0.25)'
+  return 'transparent'
 }
 </script>
 
@@ -144,105 +134,48 @@ function fmtUsd(val) {
     </div>
 
     <template v-else-if="store.assets.length">
+      
       <!-- Summary row -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Total Value</div>
-          <div class="text-2xl font-bold">{{ fmtUsd(store.portfolio_value) }}</div>
-        </div>
-        <div class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-2">Assets</div>
-          <div class="text-2xl font-bold">{{ store.assets.length }}</div>
-        </div>
-
+        <InfoCard title="Total Value" :val="store.portfolio_value" :decimals="2" type="currency"/>
+        <InfoCard title="Assets" :val="store.assets.length" type="number"/>
       </div>
 
       <!-- Pie chart + Table -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <div class="bg-bg-card border border-border rounded-xl p-6 flex flex-col transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Allocation</div>
-          <div class="flex-1 min-h-72 relative">
-            <Pie v-if="pieData" :data="pieData" :options="pieOptions" />
-          </div>
-        </div>
-
-        <div class="bg-bg-card border border-border rounded-xl p-6 flex flex-col transition hover:bg-bg-card-hover">
-          <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Holdings</div>
-          <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-              <thead>
-                <tr>
-                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Symbol</th>
-                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Value</th>
-                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Weight</th>
-                  <th class="text-left px-4 py-3 font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">Return</th>
-                  <th class="border-b border-border"></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="asset in store.assets" :key="asset.symbol">
-                  <td class="px-4 py-3 border-b border-border font-semibold text-accent">{{ asset.symbol }}</td>
-                  <td class="px-4 py-3 border-b border-border">{{ fmtUsd(asset.value) }}</td>
-                  <td class="px-4 py-3 border-b border-border">{{ (store.weights[asset.symbol] * 100).toFixed(1) }}%</td>
-                  <td class="px-4 py-3 border-b border-border">
-                    <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold"
-                          :class="asset.return >= 0 ? 'bg-positive/15 text-positive' : 'bg-negative/15 text-negative'">
-                      {{ fmtPct(asset.return) }}
-                    </span>
-                  </td>
-                  <td class="px-4 py-3 border-b border-border">
-                    <button @click="removeAsset(asset.symbol)" title="Remove"
-                            class="bg-transparent border-none text-text-secondary cursor-pointer p-1 rounded-lg transition hover:text-negative hover:bg-negative/10">
-                      ✕
-                    </button>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <PieChart :title="'Allocation'"/>
+        
+        <DataTable title="Holdings" :columns="holdingsColumns" :rows="store.assets">
+          <template #cell-value="{ row }">
+            {{ fmtUsd(row.value) }}
+          </template>
+          <template #cell-weight="{ row }">
+            {{ (store.weights[row.symbol] * 100).toFixed(1) }}%
+          </template>
+          <template #cell-return="{ row }">
+            <span class="inline-block px-2.5 py-0.5 rounded-full text-xs font-semibold"
+                  :class="row.return >= 0 ? 'bg-positive/15 text-positive' : 'bg-negative/15 text-negative'">
+              {{ fmtPct(row.return) }}
+            </span>
+          </template>
+        </DataTable>
       </div>
 
       <!-- Correlation matrix -->
-      <div v-if="correlation" class="bg-bg-card border border-border rounded-xl p-6 transition hover:bg-bg-card-hover">
-        <div class="text-xs font-semibold uppercase tracking-wider text-text-secondary mb-3">Correlation Matrix</div>
-        <div class="overflow-x-auto">
-          <table class="w-full text-sm">
-            <thead>
-              <tr>
-                <th class="px-4 py-3 border-b border-border"></th>
-                <th v-for="sym in correlation.symbols" :key="sym" class="px-4 py-3 text-center font-semibold text-text-secondary text-xs uppercase tracking-wide border-b border-border">{{ sym }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, i) in correlation.matrix" :key="i">
-                <td class="px-4 py-3 border-b border-border font-semibold text-accent">{{ correlation.symbols[i] }}</td>
-                <td v-for="(val, j) in row" :key="j"
-                    class="px-4 py-3 border-b border-border text-center text-xs tabular-nums"
-                    :style="{ background: corrColor(val) }">
-                  {{ val.toFixed(2) }}
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
+      <DataTable
+        v-if="correlation"
+        title="Correlation Matrix"
+        :columns="corrColumns"
+        :rows="corrRows"
+      >
+        <template #cell="{ value, col }">
+          {{ col.key !== '_label' && typeof value === 'number' ? value.toFixed(2) : value }}
+        </template>
+      </DataTable>
     </template>
 
     <div v-else class="flex items-center justify-center min-h-72 text-text-secondary">No portfolio data available.</div>
   </div>
 </template>
 
-<script>
-export default {
-  methods: {
-    corrColor(val) {
-      if (val >= 0.8) return 'rgba(0,206,201,0.25)'
-      if (val >= 0.4) return 'rgba(0,206,201,0.12)'
-      if (val <= -0.4) return 'rgba(255,107,107,0.12)'
-      if (val <= -0.8) return 'rgba(255,107,107,0.25)'
-      return 'transparent'
-    }
-  }
-}
-</script>
+

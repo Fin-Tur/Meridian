@@ -8,11 +8,13 @@ import {
 import { fetch_simulation } from '@/services/api.js'
 import InfoCard from '@/components/InfoCard.vue'
 import Histogram from '@/components/Histogram.vue'
+import { usePortfolioStore } from '@/stores/counter.js'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
 const simulation = ref(null)
 const loading = ref(true)
+const store = usePortfolioStore()
 
 onMounted(async () => {
   simulation.value = await fetch_simulation()
@@ -21,10 +23,11 @@ onMounted(async () => {
 
 const histLabels = computed(() => {
   if (!simulation.value) return []
-  const { bin_size, bins } = simulation.value
   const labels = []
-  for (let i = 0; i < bins.length; i++) {
-    
+  for (let i = 0; i < 50; i++) {
+    const binAmount = ((simulation.value.min + i * simulation.value.bin_width)).toFixed(0)
+    const pct = store.pctOfPortfolio(binAmount)
+    labels.push((pct-100).toFixed(2))
   }
   return labels
 })
@@ -43,20 +46,20 @@ const histLabels = computed(() => {
     <template v-else-if="simulation">
       <!-- Stats -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <InfoCard title="Mean Return" :val="simulation.avg_return" :type="'beneficial-percentile'" :decimals="2" />
+        <InfoCard title="Average Return" :val="simulation.avg_return" :type="'beneficial-currency'" :decimals="2" />
         <InfoCard title="Min" :val="simulation.min" :type="'beneficial-percentile'" :decimals="2" />
         <InfoCard title="Max" :val="simulation.max" :type="'beneficial-percentile'" :decimals="2" />
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <InfoCard title="Var 95%" :val="simulation.var95" :type="'beneficial-percentile'" :decimals="2" />
-        <InfoCard title="Var 99%" :val="simulation.var99" :type="'beneficial-percentile'" :decimals="2" />
-        <InfoCard title="CVaR 95%" :val="simulation.cvar95" :type="'beneficial-percentile'" :decimals="2" />
-        <InfoCard title="CVaR 99%" :val="simulation.cvar99" :type="'beneficial-percentile'" :decimals="2" />
+        <InfoCard title="Var 95%" :val="-simulation.var95" :type="'currency-beneficial'" :decimals="2" />
+        <InfoCard title="Var 99%" :val="-simulation.var99" :type="'currency-beneficial'" :decimals="2" />
+        <InfoCard title="CVaR 95%" :val="-simulation.cvar95" :type="'currency-beneficial'" :decimals="2" />
+        <InfoCard title="CVaR 99%" :val="-simulation.cvar99" :type="'currency-beneficial'" :decimals="2" />
       </div>
 
       <!-- Histogram -->
-      <Histogram :values="simulation.bins" :labels="simulation.labels" type="percent" title="Return Distribution" />
+      <Histogram :values="simulation.bins" :labels="histLabels" type="distribution-percent" title="Return Distribution" />
     </template>
 
     <div v-else class="flex items-center justify-center min-h-72 text-text-secondary">No simulation data available.</div>

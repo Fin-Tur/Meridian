@@ -30,7 +30,7 @@ const text = computed(() => {
     str += (props.val * 100).toFixed(props.decimals) + '%'
   }
   else if(props.type.includes("currency")){
-    str += '$' + val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    str += '$' + props.val.toLocaleString(undefined, { minimumFractionDigits: props.decimals, maximumFractionDigits: props.decimals })
 
   }else{
     str += props.val.toFixed(props.decimals)

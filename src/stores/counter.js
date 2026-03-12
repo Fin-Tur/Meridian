@@ -43,5 +43,9 @@ export const usePortfolioStore = defineStore('portfolio', () => {
     weights.value[symbol] = weight
   }
 
-  return { assets, symbols, portfolio_value, weights, setPortfolioValue, addAsset, removeAsset, setWeight }
+  function pctOfPortfolio(usd) {
+    return portfolio_value.value > 0 ? (usd / portfolio_value.value) * 100 : 0
+  }
+
+  return { assets, symbols, portfolio_value, weights, setPortfolioValue, addAsset, removeAsset, setWeight, pctOfPortfolio }
 })
