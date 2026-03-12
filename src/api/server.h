@@ -39,12 +39,13 @@ class server {
         });
 
         svr.Post("/simulate", [](const httplib::Request& req, httplib::Response& res){
+            std::cout << "Received simulation request with body: " << req.body << std::endl;
             try{
                 //Fetch body
                 auto body = nlohmann::json::parse(req.body);
                 double portfolio_value = body.at("portfolio_value").get<double>();
                 size_t horizon_days = body.value("horizon_days", 252);
-                size_t n_sims = body.value("n_simulations", 10000);
+                size_t n_sims = body.value("n_simulations", 1000);
 
             std::vector<assets::asset> fetched_assets;
             std::vector<double> weights;
@@ -82,15 +83,17 @@ class server {
             response_json["bin_width"] = bin_width;    
             std::vector<int> histogramm_bins(50);
             for(auto& a : result.final_portfolio_values){
-                int bin_index = std::min(static_cast<int>((a - result.final_portfolio_values.front()) / bin_width), 49);
+                int bin_index = std::min(static_cast<int>((a / bin_width)), 49);
                 histogramm_bins[bin_index]++;
             }
             response_json["histogram_bins"] = histogramm_bins;
+            std::cout << "Simulation completed and response sent:\n" << response_json << std::endl;
             res.set_content(response_json.dump(), "application/json");
-
+            
             } catch(const std::exception& e) {
                 res.status = 400;
                 res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+                std::cerr << "Error processing simulation request: " << e.what() << std::endl;
                 return;
             }
         });
@@ -200,7 +203,7 @@ class server {
                     fetched_assets.push_back(fetched);
                     amounts.push_back(amount);
                 }
-                std::cout << "Fetched " << fetched_assets.size() << " assets for portfolio valuation." << std::endl;
+
                 nlohmann::json response_json;
                 double portfolio_value = 0.0;
 
@@ -212,11 +215,7 @@ class server {
                     weights.push_back({fetched_assets[i].symbol, (amounts[i] * fetched_assets[i].data_points[fetched_assets[i].n_data_points - 1].adjclose) / portfolio_value});
                 }
                 response_json["portfolio_value"] = portfolio_value;
-                nlohmann::json weights_json;
-                for (const auto& [symbol, w] : weights) {
-                    weights_json[symbol] = w;
-                }
-                response_json["weights"] = weights_json;
+                response_json["weights"] = weights;
                 res.set_content(response_json.dump(), "application/json");
 
             } catch(const std::exception& e) {

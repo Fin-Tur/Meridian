@@ -72,7 +72,7 @@ namespace asset_compute {
     void normalize_covariance_matrix(Mat& cov_matrix){
         auto n_rows = cov_matrix.rows();
         auto n_cols = cov_matrix.cols();
-        auto diag = cov_matrix.diagonal();
+        auto diag = cov_matrix.diagonal().eval();
         for(size_t i = 0; i < n_rows; ++i){
             for(size_t j = i; j < n_cols; ++j){
                 cov_matrix(i,j) /= std::sqrt(diag(i) * diag(j));
