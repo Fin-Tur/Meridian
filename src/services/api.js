@@ -31,21 +31,9 @@ async function api_call(endpoint, method = 'GET', body = null) {
  
 }
 
-// ── Helpers ──
-
-function lastOf(arr, fallback = 0) {
-  return arr && arr.length > 0 ? arr[arr.length - 1] : fallback
-}
-
-// Computes daily log returns from an array of prices
-function computeLogReturns(closes) {
-  if (!closes || closes.length < 2) return []
-  return closes.slice(1).map((p, i) => Math.log(p / closes[i]))
-}
-
 // Runs monte carlo simulation for the current portfolio.
 // Returns histogram bins, labels, avg_return, min, max, var95, var99, cvar95, cvar99.
-export async function fetch_simulation() {
+export async function fetch_simulation(n_sims, horizon_days, drift_scenario) {
   const store = usePortfolioStore()
   const portfolioAssets = store.assets
 
@@ -57,15 +45,13 @@ export async function fetch_simulation() {
 
   const raw = await api_call('/simulate', 'POST', {
     portfolio_value: store.portfolio_value,
-    horizon_days: 252,
-    n_simulations: 1000,
+    horizon_days: horizon_days,
+    n_simulations: n_sims,
     assets: assetDataList,
+    drift_scenario: drift_scenario,
   })
 
   if (!raw) return null
-
-  // Convert absolute dollar values to fractional returns relative to starting portfolio value
-  const toReturn = val => store.portfolio_value > 0 ? (val - store.portfolio_value) / store.portfolio_value : 0
 
   // Build histogram labels from min value + bin_width steps
   const labels = raw.histogram_bins.map((_, i) =>
@@ -74,8 +60,8 @@ export async function fetch_simulation() {
 
   return {
     avg_return: raw.avg,
-    min: toReturn(raw.min),
-    max: toReturn(raw.max),
+    min: raw.min,
+    max: raw.max,
     var95: raw.var_95,
     var99: raw.var_99,
     cvar95: raw.cvar_95,
@@ -123,13 +109,6 @@ export async function fetch_portfolio() {
 // Fetches data for a single asset by ticker symbol.
 // Returns server fields plus ytd_returns alias and computed log_returns.
 export async function fetch_asset(symbol, type = 'stock') {
-  const raw = await api_call('/asset', 'POST', { ticker: symbol.toUpperCase(), type })
+  return await api_call('/asset', 'POST', { ticker: symbol.toUpperCase(), type })
 
-  if (!raw) return null
-
-  return {
-    ...raw,
-    ytd_returns: raw.ytd_return,                    // alias for view compatibility
-    log_returns: computeLogReturns(raw.adj_closes),  // derived for histogram
-  }
 }

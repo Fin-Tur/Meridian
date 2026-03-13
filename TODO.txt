@@ -1,8 +1,6 @@
 
 
 Asset Explorer Definitions
-Asset Explorer Example Cards
-Asset Explorer Graph
-MonteCarlo sim settings 
+Asset Explorer Example Cards 
 MyPortfolio Holdings
-MyPortfolio ManageAssets Rework
+Store asset buy-in/buy-out for returns, Invested Card, TotalValue type="beneficial"

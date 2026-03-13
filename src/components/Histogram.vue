@@ -41,26 +41,30 @@ const props = defineProps({
   }
 })
 
+function hasType(substring) {
+  return props.type.includes(substring)
+} 
+
 const chartData = computed(() => {
   const vals = props.values ?? []
   console.log('Histogram labels:', props.labels)
   const resolvedLabels = props.labels
-    ? props.labels.map(l => props.type.includes('percent') ? l + '%' : l)
-    : vals.map((_, i) => props.type.includes('percent') ? i + '%' : String(i));
+    ? props.labels.map(l => hasType('percent') ? l + '%' : l)
+    : vals.map((_, i) => hasType('percent') ? i + '%' : String(i));
     return {
     labels: resolvedLabels,
     datasets: [{
-      label: props.type.includes('distribution') ? 'Frequency' : props.type.includes('price') ? 'Price' : 'Value',
+      label: hasType('distribution') ? 'Frequency' : hasType('price') ? 'Price' : 'Value',
       data: vals,
       backgroundColor: resolvedLabels.map(v => {
         const num = parseFloat(v)
-        return (props.type.includes('percent') || props.type.includes('price')) && num < 0
+        return (hasType('percent') || hasType('price')) && num < 0
           ? 'rgba(255,107,107,0.7)'
           : 'rgba(0,206,201,0.7)'
       }),
       borderColor: resolvedLabels.map(v => {
         const num = parseFloat(v)
-        return (props.type.includes('percent') || props.type.includes('price')) && num < 0
+        return (hasType('percent') || hasType('price')) && num < 0
           ? '#ff6b6b'
           : '#00cec9'
       }),

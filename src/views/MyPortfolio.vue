@@ -147,7 +147,7 @@ function corrColor(val) {
         
         <DataTable title="Holdings" :columns="holdingsColumns" :rows="store.assets">
           <template #cell-value="{ row }">
-            {{ fmtUsd(row.value) }}
+            {{ fmtUsd(store.portfolio_value * store.weights[row.symbol]) }}
           </template>
           <template #cell-weight="{ row }">
             {{ (store.weights[row.symbol] * 100).toFixed(1) }}%

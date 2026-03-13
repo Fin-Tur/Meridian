@@ -9,6 +9,7 @@ import { fetch_asset } from '@/services/api.js'
 import InfoCard from '@/components/InfoCard.vue'
 import SearchBar from '@/components/SearchBar.vue'
 import Histogram from '@/components/Histogram.vue'
+import PriceChart from '@/components/PriceChart.vue'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -61,12 +62,12 @@ async function search() {
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <InfoCard title="YTD Returns" :val="asset.ytd_returns" :type="'beneficial-percentile'" :decimals="2" />
+        <InfoCard title="YTD Returns" :val="asset.ytd_return" :type="'beneficial-percentile'" :decimals="2" />
         <InfoCard title="Skewness" :val="asset.skewness" :decimals="4" />
         <InfoCard title="Kurtosis" :val="asset.kurtosis" :decimals="4" />
       </div>
       <div>
-        <Histogram :values="asset.log_returns" type="percent"/>
+        <PriceChart :values="asset.adj_closes" :currency="asset.currency === 'USD' ? '$' : asset.currency" title="Price History" />
       </div>    
     </template>
 

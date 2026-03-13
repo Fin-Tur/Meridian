@@ -4,6 +4,7 @@
   --color-bg-primary: #0f1117;
   --color-bg-secondary: #1a1d27;
   --color-bg-card: #1e2130;
+  --color-bg-card-light: #77838c;
   --color-bg-card-hover: #252839;
   --color-border: #2a2d3e;
   --color-text-primary: #e4e6f0;
@@ -28,6 +29,20 @@ body {
 ::-webkit-scrollbar-track { background: var(--color-bg-primary); }
 ::-webkit-scrollbar-thumb { background: var(--color-border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--color-text-secondary); }
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+select {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+  border-color: var(--color-border);
+}
+option {
+  background-color: var(--color-bg-secondary);
+  color: var(--color-text-primary);
+}
 
 /* Spinner animation */
 @keyframes spin {
