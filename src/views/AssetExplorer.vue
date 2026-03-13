@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, onMounted } from 'vue'
 import { Bar } from 'vue-chartjs'
 import {
   Chart as ChartJS, BarElement, CategoryScale, LinearScale,
@@ -10,6 +10,7 @@ import InfoCard from '@/components/InfoCard.vue'
 import SearchBar from '@/components/SearchBar.vue'
 import Histogram from '@/components/Histogram.vue'
 import PriceChart from '@/components/PriceChart.vue'
+import AssetCard from '@/components/AssetCard.vue'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -17,6 +18,10 @@ const symbol = ref('')
 const asset = ref(null)
 const loading = ref(false)
 const searched = ref(false)
+
+const featuredSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'VGK', 'SPY', 'GLD', 'IWDA.AS', 'EIMI.L']
+const featuredAssets = ref([])
+const featuredLoading = ref(false)
 
 async function search() {
   const sym = symbol.value.trim().toUpperCase()
@@ -27,6 +32,19 @@ async function search() {
   loading.value = false
 }
 
+function selectFeatured(sym) {
+  symbol.value = sym
+  search()
+}
+
+onMounted(async () => {
+  featuredLoading.value = true
+  const results = await Promise.all(
+    featuredSymbols.map(s => fetch_asset(s).catch(() => null))
+  )
+  featuredAssets.value = results.filter(Boolean)
+  featuredLoading.value = false
+})
 </script>
 
 <template>
@@ -40,6 +58,21 @@ async function search() {
               class="px-5 py-2.5 bg-accent text-white font-semibold text-sm rounded-lg transition hover:bg-accent-hover cursor-pointer disabled:opacity-50">
         {{ loading ? 'Loading…' : 'Search' }}
       </button>
+    </div>
+
+    <div v-if="!searched && !loading" class="mb-8">
+      <h2 class="text-lg font-semibold text-text-secondary mb-4">Popular Assets</h2>
+      <div v-if="featuredLoading" class="text-text-secondary text-sm">Loading suggestions…</div>
+      <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <AssetCard
+          v-for="a in featuredAssets" :key="a.symbol"
+          :symbol="a.symbol"
+          :price="a.adj_closes?.[a.adj_closes.length - 1]"
+          :currency="a.currency"
+          :ytdReturn="a.ytd_return"
+          @select="selectFeatured"
+        />
+      </div>
     </div>
 
     <div v-if="loading" class="flex items-center justify-center min-h-72 text-text-secondary">
@@ -62,7 +95,7 @@ async function search() {
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <InfoCard title="YTD Returns" :val="asset.ytd_return" :type="'beneficial-percentile'" :decimals="2" />
+        <InfoCard title="YTD Returns" :val="asset.ytd_return/100" :type="'beneficial-percentile'" :decimals="2" />
         <InfoCard title="Skewness" :val="asset.skewness" :decimals="4" />
         <InfoCard title="Kurtosis" :val="asset.kurtosis" :decimals="4" />
       </div>
