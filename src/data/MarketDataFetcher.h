@@ -13,7 +13,7 @@ namespace data_fetcher {
     //TODO limited size + FIFO
     inline std::unordered_map<std::string, std::pair<assets::asset, size_t>> stock_cache;
 
-    assets::asset fetch_stock(std::string& symbol, std::string range = "3y") {
+    assets::asset fetch_stock(std::string& symbol, std::string range = "10y") {
         size_t day = std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24;
         if(stock_cache.contains(symbol)){
             auto& [cached_asset, last_fetched_day] = stock_cache[symbol];
@@ -64,7 +64,7 @@ namespace data_fetcher {
 
     // Uses CoinGecko market_chart endpoint with daily interval to ensure timestamp
     // alignment with stock data from Yahoo Finance (both return one data point per calendar day).
-    assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 1095) {
+    assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 3614) {
         httplib::SSLClient client("api.coingecko.com");
 
         std::string path = "/api/v3/coins/";

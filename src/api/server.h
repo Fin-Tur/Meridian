@@ -46,6 +46,10 @@ class server {
                 double portfolio_value = body.at("portfolio_value").get<double>();
                 size_t horizon_days = body.value("horizon_days", 252);
                 size_t n_sims = body.value("n_simulations", 1000);
+                monte_carlo::drift_scenario scenario = body.value("drift_scenario", "SHRINKAGE_25") == "SHRINKAGE_25" ? monte_carlo::drift_scenario::SHRINKAGE_25 : 
+                                                body.value("drift_scenario", "SHRINKAGE_25") == "ZERO" ? monte_carlo::drift_scenario::ZERO :
+                                                body.value("drift_scenario", "SHRINKAGE_25") == "RISK_FREE" ? monte_carlo::drift_scenario::RISK_FREE :
+                                                monte_carlo::drift_scenario::HISTORICAL;
 
             std::vector<assets::asset> fetched_assets;
             std::vector<double> weights;
@@ -68,7 +72,7 @@ class server {
             }
 
             // Run Monte Carlo simulation
-            auto preset = monte_carlo::generate_sim_preset(fetched_assets, weights, n_sims, horizon_days, portfolio_value);
+            auto preset = monte_carlo::generate_sim_preset(fetched_assets, weights, n_sims, horizon_days, portfolio_value, scenario);
             auto result = monte_carlo::run_simulation(preset);
 
             nlohmann::json response_json;   
@@ -158,7 +162,7 @@ class server {
 
                 nlohmann::json response_json;
                 response_json["symbol"] = fetched.symbol;
-                response_json["currency"] = fetched.currency;
+                response_json["currency"] = convert_curr_tostr(fetched.currency);
                 response_json["adj_closes"] = adj_closes;
                 response_json["volatility"] = asset_compute::volatility(fetched) * sqrt(252); //Annualized volatility
                 response_json["avg_log_return"] = asset_compute::avg_log_return(fetched) * 252; //Annualized average log return
@@ -207,6 +211,8 @@ class server {
 
                 nlohmann::json response_json;
                 double portfolio_value = 0.0;
+
+                data_fetcher::unify_asset_currencies(fetched_assets, currency::USD);
 
                 for(size_t i = 0; i < fetched_assets.size(); i++){
                     portfolio_value += amounts[i] * fetched_assets[i].data_points[fetched_assets[i].n_data_points - 1].adjclose;

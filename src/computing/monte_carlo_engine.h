@@ -25,18 +25,26 @@ inline thread_local std::mt19937 rng = [](){
 
 namespace monte_carlo {
 
+    enum class drift_scenario {
+        ZERO,
+        SHRINKAGE_25,
+        RISK_FREE,
+        HISTORICAL
+    };
+
     struct sim_preset {
+        double portfolio_value;
+
         size_t n_assets;
         std::vector<double> sigma;
         std::vector<double> mu;
         std::vector<double> df;
         Vec weight;
 
+        Mat cholesky_cov_mat;
         size_t n_sims;
         size_t horizon_days;
-        Mat cholesky_cov_mat;
-
-        double portfolio_value;
+        drift_scenario drift_scenario;
     };
 
     struct sim_result {
@@ -49,7 +57,7 @@ namespace monte_carlo {
     };
 
     //Portfolio value in USD, weights should be in decimals (0.5 for 50%) 
-    sim_preset generate_sim_preset(std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days, double portfolio_value = 1000){
+    sim_preset generate_sim_preset(std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days, double portfolio_value = 1000, drift_scenario scenario = drift_scenario::SHRINKAGE_25){
         sim_preset preset;
         data_fetcher::unify_asset_currencies(assets, currency::USD);
         preset.n_sims = n_sims;
@@ -60,7 +68,7 @@ namespace monte_carlo {
         preset.sigma.reserve(assets.size());
         preset.mu.reserve(assets.size());
         preset.df.reserve(assets.size());
-
+        preset.drift_scenario = scenario;
         preset.weight = Vec::Map(weights.data(), weights.size());
 
         for (size_t i = 0; i < assets.size(); i++) {
@@ -81,6 +89,21 @@ namespace monte_carlo {
         for (size_t k = 0; k < preset.n_assets; ++k) {
             dists.emplace_back(preset.df[k]);
             drifts[k] = preset.mu[k] - 0.5 * preset.sigma[k] * preset.sigma[k];
+
+            switch(preset.drift_scenario){
+                case drift_scenario::ZERO:
+                    drifts[k] = 0.0;
+                    break;
+                case drift_scenario::SHRINKAGE_25:
+                    drifts[k] *= 0.25;
+                    break;
+                case drift_scenario::RISK_FREE:
+                    drifts[k] = 0.01 / 252; //Assuming 1% annual risk free rate, converted to daily
+                    break;
+                case drift_scenario::HISTORICAL:
+                default:
+                    break;
+            }
         }
         Vec S(preset.n_assets);
         Vec Z(preset.n_assets);

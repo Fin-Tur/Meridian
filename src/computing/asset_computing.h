@@ -91,14 +91,30 @@ namespace asset_compute {
         return std::sqrt(volatility_sum / (asset.n_data_points - 1));
     }
 
-    double excess_kurtosis(const assets::asset& asset){
-        double avg_return = avg_log_return(asset);
-        double vol = volatility(asset);
-        double kurtosis_sum = 0.0;
-        for(size_t i = 1; i < asset.n_data_points; i++){
-            kurtosis_sum += std::pow((asset.data_points[i].adjclose - avg_return) / vol, 4);
+    double excess_kurtosis(const assets::asset& asset) {
+        if (asset.n_data_points < 2) {
+            return 0.0;
         }
-         return kurtosis_sum / (asset.n_data_points - 1) - 3.0; //Excess kurtosis is kurtosis - 3
+        double mu = avg_log_return(asset);
+        double sigma = volatility(asset);
+
+        if (sigma <= 0.0) {
+            return 0.0;
+        }
+
+        double sum = 0.0;
+        size_t n_returns = asset.n_data_points - 1;
+
+        for (size_t i = 1; i < asset.n_data_points; ++i) {
+            double r = std::log(
+                asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose
+            );
+
+            double z = (r - mu) / sigma;
+            sum += std::pow(z, 4);
+        }
+
+        return sum / static_cast<double>(n_returns) - 3.0;
     }
 
     double dof_excess_kurtosis(const assets::asset& asset){
