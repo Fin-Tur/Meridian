@@ -2,6 +2,7 @@
 #define CPPHTTPLIB_OPENSSL_SUPPORT
 #include <map>
 #include <vector>
+#include <chrono>
 #include <stdexcept>
 #include "../thirdparty/httplib.h"
 #include "../thirdparty/json.hpp"
@@ -9,7 +10,18 @@
 
 namespace data_fetcher {
 
+    //TODO limited size + FIFO
+    inline std::unordered_map<std::string, std::pair<assets::asset, size_t>> stock_cache;
+
     assets::asset fetch_stock(std::string& symbol, std::string range = "1y") {
+        size_t day = std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24;
+        if(stock_cache.contains(symbol)){
+            auto& [cached_asset, last_fetched_day] = stock_cache[symbol];
+            if(day - last_fetched_day < 1){ //Cache is valid for 1 day
+                return cached_asset;
+            }
+        }
+
         httplib::SSLClient client("query1.finance.yahoo.com");
         client.set_default_headers({{"User-Agent", "Mozilla/5.0"}});
 
@@ -46,6 +58,7 @@ namespace data_fetcher {
                 .timestamp = timestamps[i].get<uint32_t>() / 86400 //Convert to Days
             };
         }
+        stock_cache[symbol] = {a, day};
         return a;
 }
 
