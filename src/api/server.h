@@ -83,7 +83,8 @@ class server {
             response_json["bin_width"] = bin_width;    
             std::vector<int> histogramm_bins(50);
             for(auto& a : result.final_portfolio_values){
-                int bin_index = std::min(static_cast<int>((a / bin_width)), 49);
+                int bin_index = static_cast<int>((a - result.final_portfolio_values.front()) / bin_width);
+                if(bin_index == 50) bin_index = 49;
                 histogramm_bins[bin_index]++;
             }
             response_json["histogram_bins"] = histogramm_bins;

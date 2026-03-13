@@ -14,7 +14,7 @@
 #define Mat Eigen::MatrixXd
 #define Vec Eigen::VectorXd
 
-thread_local std::mt19937 rng = [](){
+inline thread_local std::mt19937 rng = [](){
     std::seed_seq seq {
         static_cast<uint64_t>(std::chrono::high_resolution_clock::now().time_since_epoch().count()),
         static_cast<uint64_t>(std::hash<std::thread::id>{}(std::this_thread::get_id())),
@@ -48,7 +48,7 @@ namespace monte_carlo {
         double avg;
     };
 
-    //Portfolio value in USD, weights should be in decimals (0.5 for 50%)
+    //Portfolio value in USD, weights should be in decimals (0.5 for 50%) 
     sim_preset generate_sim_preset(std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days, double portfolio_value = 1000){
         sim_preset preset;
         data_fetcher::unify_asset_currencies(assets, currency::USD);
@@ -66,7 +66,7 @@ namespace monte_carlo {
         for (size_t i = 0; i < assets.size(); i++) {
             preset.sigma.push_back(asset_compute::volatility(assets[i]));
             preset.mu.push_back(asset_compute::avg_log_return(assets[i])); 
-            preset.df.push_back(asset_compute::dof_excess_kurtosis(assets[i]));
+            preset.df.push_back(std::max(asset_compute::dof_excess_kurtosis(assets[i]), 5.0));
         }
         Mat cov_matrix = asset_compute::compute_covariance_matrix(assets);
         asset_compute::normalize_covariance_matrix(cov_matrix);
@@ -74,7 +74,7 @@ namespace monte_carlo {
         return preset;
     }
 
-    void simulation_job(const sim_preset& preset, int8_t id, int32_t load_size, double* res_out){
+    void simulation_job(const sim_preset& preset, unsigned int id, int32_t load_size, double* res_out){
         std::vector<std::student_t_distribution<double>> dists;
         dists.reserve(preset.n_assets);
         std::vector<double> drifts(preset.n_assets);
@@ -89,7 +89,9 @@ namespace monte_carlo {
             S.setOnes();
             for(size_t d = 0; d < preset.horizon_days; ++d){
                 for(size_t k = 0; k < preset.n_assets; ++k){
-                    Z[k] = dists[k](rng);
+                    double t = dists[k](rng);
+                    double scale = std::sqrt((preset.df[k] - 2) / preset.df[k]);
+                    Z(k) = t * scale;
                 }
                 Eps.noalias() = preset.cholesky_cov_mat * Z;
                 for(size_t j = 0; j < preset.n_assets; ++j){
