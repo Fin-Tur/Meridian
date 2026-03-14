@@ -11,7 +11,7 @@ add_executable(Meridian
     src/data/MarketDataFetcher.h
     src/api/server.h
     src/computing/asset_computing.h
-    src/computing/monte_Carlo_engine.h
+    src/computing/monte_carlo_engine.h
     src/models/currency.h
 
     )

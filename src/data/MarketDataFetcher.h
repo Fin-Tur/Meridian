@@ -1,9 +1,10 @@
 #pragma once
 #define CPPHTTPLIB_OPENSSL_SUPPORT
-#include <map>
+#include <unordered_map>
 #include <vector>
 #include <chrono>
 #include <stdexcept>
+#include <cstdlib>
 #include "../thirdparty/httplib.h"
 #include "../thirdparty/json.hpp"
 #include "../models/assets.h"
@@ -12,6 +13,7 @@ namespace data_fetcher {
 
     //TODO limited size + FIFO
     inline std::unordered_map<std::string, std::pair<assets::asset, size_t>> stock_cache;
+    inline std::unordered_map<std::string, std::pair<double, size_t>> fx_cache;
 
     assets::asset fetch_stock(std::string& symbol, std::string range = "10y") {
         size_t day = std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24;
@@ -25,9 +27,7 @@ namespace data_fetcher {
         httplib::SSLClient client("query1.finance.yahoo.com");
         client.set_default_headers({{"User-Agent", "Mozilla/5.0"}});
 
-        std::string path = "/v8/finance/chart/";
-        path += symbol;
-        path += "?range=" + range + "&interval=1d&includeAdjustedClose=true";
+        std::string path = "/v8/finance/chart/" + symbol + "?range=" + range + "&interval=1d&includeAdjustedClose=true";
 
         auto res = client.Get(path.c_str());
 
@@ -64,9 +64,23 @@ namespace data_fetcher {
 
     // Uses CoinGecko market_chart endpoint with daily interval to ensure timestamp
     // alignment with stock data from Yahoo Finance (both return one data point per calendar day).
-    assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 3614) {
+    assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 300) {
+        size_t day = std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24;
+        if(stock_cache.contains(coinId)){
+            auto& [cached_asset, last_fetched_day] = stock_cache[coinId];
+            if(day - last_fetched_day < 1){ //Cache is valid for 1 day
+                return cached_asset;
+            }
+        }
+        const char* api_key = std::getenv("COINGECKO_API_KEY");
+        if(!api_key){
+            throw std::runtime_error("COINGECKO_API_KEY not set");
+        }
         httplib::SSLClient client("api.coingecko.com");
-
+        client.set_default_headers({
+            {"User-Agent", "Meridian/1.0"},
+            {"x-cg-demo-api-key", api_key}
+        });
         std::string path = "/api/v3/coins/";
         path += coinId;
         path += "/market_chart?vs_currency=usd&days=" + std::to_string(days) + "&interval=daily";
@@ -74,6 +88,7 @@ namespace data_fetcher {
         auto res = client.Get(path.c_str());
 
         if (!res || res->status != 200) {
+            std::cerr << "Failed to fetch data for " << symbol << ". HTTP Status: " << (res ? std::to_string(res->status) : "No Response") << std::endl;
             return assets::asset{};
         }
 
@@ -93,13 +108,23 @@ namespace data_fetcher {
                 .low = close_price,
                 .high = close_price,
                 .adjclose = close_price,
-                .timestamp = static_cast<uint32_t>(prices[i][0].get<long long>() / (1000LL * 86400)) //Convert ms to Days
+                .timestamp = static_cast<uint32_t>(prices[i][0].get<long long>() / 1000LL / 86400LL) //Convert ms to Days
             };
         }
         return a;
     }
 
     double fetch_fx_rate(const currency& from_currency, currency to_currency = currency::USD) {
+        
+        if(from_currency == to_currency) return 1.0;
+        std::string pair = convert_curr_tostr(from_currency) + convert_curr_tostr(to_currency);
+        if(fx_cache.contains(pair)){
+            auto& [rate, last_fetched_day] = fx_cache[pair];
+            size_t day = std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24;
+            if(day - last_fetched_day < 1){ //Cache is valid for 1 day
+                return rate;
+            }
+        }
         httplib::SSLClient client("query1.finance.yahoo.com");
         client.set_default_headers({{"User-Agent", "Mozilla/5.0"}});
 
@@ -114,6 +139,7 @@ namespace data_fetcher {
 
         auto j = nlohmann::json::parse(res->body);
         double rate = j["chart"]["result"][0]["meta"]["regularMarketPrice"].get<double>();
+        fx_cache[pair] = {rate, std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24};
         return rate;
     }
 

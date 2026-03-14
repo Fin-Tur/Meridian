@@ -10,6 +10,8 @@
 #include "../computing/monte_carlo_engine.h"
 #include "../computing/asset_computing.h"
 #include "../models/currency.h"
+#include "../models/coins.h"
+
 
 //========= DEV ONLY ==========
 //Python fast API to come
@@ -60,8 +62,9 @@ class server {
                 double weight      = a.at("weight").get<double>();
 
                 assets::asset fetched;
+                if(coin::is_crypto(ticker)) type = "crypto"; 
                 if (type == "crypto") {
-                    std::string coinId = ticker;
+                    std::string coinId = coin::to_coin_id(ticker);
                     fetched = data_fetcher::fetch_crypto(coinId, ticker);
                 } else {
                     fetched = data_fetcher::fetch_stock(ticker);
@@ -114,8 +117,9 @@ class server {
                     std::string type   = a.at("type").get<std::string>();
 
                     assets::asset fetched;
+                    if(coin::is_crypto(ticker)) type = "crypto";
                     if (type == "crypto") {
-                        std::string coinId = ticker;
+                        std::string coinId = coin::to_coin_id(ticker);
                         fetched = data_fetcher::fetch_crypto(coinId, ticker);
                     } else {
                         fetched = data_fetcher::fetch_stock(ticker);
@@ -148,13 +152,16 @@ class server {
                 std::string type   = body.at("type").get<std::string>();
 
                 assets::asset fetched;
+                if(coin::is_crypto(ticker)) type = "crypto";
                 if (type == "crypto") {
-                    std::string coinId = ticker;
+                    std::string coinId = coin::to_coin_id(ticker);
                     fetched = data_fetcher::fetch_crypto(coinId, ticker);
                 } else {
                     fetched = data_fetcher::fetch_stock(ticker);
                 }
-
+                if(fetched.n_data_points == 0){
+                    throw std::runtime_error("Failed to fetch market data for: " + ticker);
+                }
                 std::vector<double> adj_closes;
                 adj_closes.reserve(fetched.n_data_points);
                 for (int i = 0; i < fetched.n_data_points; i++)
@@ -175,6 +182,13 @@ class server {
                 res.set_content(response_json.dump(), "application/json");
 
             } catch(const std::exception& e) {
+                if(std::string(e.what()).find("Failed to fetch market data") != std::string::npos){
+                    res.status = 4041;
+                    res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+                } else {
+                    res.status = 400;
+                    res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+                }
                 res.status = 400;
                 res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
                 return;
@@ -194,8 +208,9 @@ class server {
                     double amount      = a.at("amount").get<double>();
 
                     assets::asset fetched;
+                    if(coin::is_crypto(ticker)) type = "crypto";
                     if (type == "crypto") {
-                        std::string coinId = ticker;
+                        std::string coinId = coin::to_coin_id(ticker);
                         fetched = data_fetcher::fetch_crypto(coinId, ticker);
                     } else {
                         fetched = data_fetcher::fetch_stock(ticker);
@@ -226,7 +241,13 @@ class server {
                 res.set_content(response_json.dump(), "application/json");
 
             } catch(const std::exception& e) {
-                std::cout << "Error processing portfolio request: " << e.what() << std::endl;
+                if(std::string(e.what()).find("Failed to fetch market data") != std::string::npos){
+                    res.status = 4041;
+                    res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+                } else {
+                    res.status = 400;
+                    res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+                }
                 res.status = 400;
                 res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
                 return;
