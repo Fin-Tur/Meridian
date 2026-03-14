@@ -18,8 +18,6 @@ export async function checkResponse(response) {
   }
   if (response.ok) {
     return { success: true, data: await response.json() }
-  } else if (response.status === 404) {
-    return { success: true, data: null }
   }
   const exceptionDTO = await response.json()
   return { success: false, status: response.status, error: exceptionDTO }

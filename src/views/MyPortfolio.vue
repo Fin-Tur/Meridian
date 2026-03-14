@@ -22,13 +22,16 @@ const newQuantity = ref(1)
 
 async function loadData() {
   loading.value = true
-  const [p, c] = await Promise.all([fetch_portfolio(), fetch_correlation()])
+  const p = await fetch_portfolio()
+  const c = await fetch_correlation()
   store.setPortfolioValue(p.portfolio_value)
   for(const weight of p.weights){
-    store.setWeight(weight[0], weight[1])
-  }
+  store.setWeight(weight[0], weight[1])
   correlation.value = c
   loading.value = false
+  }
+  
+  
 }
 
 onMounted(loadData)

@@ -88,16 +88,16 @@ onMounted(async () => {
 
       <!-- Stats grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <InfoCard title="Volatility" :val="asset.volatility" :type="'percentile'" :decimals="2" />
-        <InfoCard title="Avg Log Return" :val="asset.avg_log_return" :type="'beneficial'" :decimals="4" />
-        <InfoCard title="Sharpe Ratio" :val="asset.sharpe_ratio" :decimals="3" />
-        <InfoCard title="Max Drawdown" :val="asset.max_drawdown" :type="'beneficial-percentile'" :decimals="2" />
+        <InfoCard title="Volatility" :val="asset.volatility" :type="'percentile'" :decimals="2" :tooltip="'Volatility displays the degree of variation of the asset\'s returns.'"/>
+        <InfoCard title="Avg Log Return" :val="asset.avg_log_return" :type="'beneficial'" :decimals="4" :tooltip="'Average log return displays the average logarithmic return of the asset.'"/>
+        <InfoCard title="Sharpe Ratio" :val="asset.sharpe_ratio" :decimals="3" :tooltip="'The Sharpe Ratio measures the risk-adjusted return of the asset. A higher Sharpe Ratio indicates better risk-adjusted performance.'"/>
+        <InfoCard title="Max Drawdown" :val="-asset.max_drawdown" :type="'beneficial-percentile'" :decimals="2" :tooltip="'Max Drawdown displays the maximum observed loss from a peak to a trough of the asset.'"/>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-        <InfoCard title="YTD Returns" :val="asset.ytd_return/100" :type="'beneficial-percentile'" :decimals="2" />
-        <InfoCard title="Skewness" :val="asset.skewness" :decimals="4" />
-        <InfoCard title="Kurtosis" :val="asset.kurtosis" :decimals="4" />
+        <InfoCard title="YTD Returns" :val="asset.ytd_return/100" :type="'beneficial-percentile'" :decimals="2" :tooltip="'Year-to-date returns display the performance of the asset since the beginning of the year.'"/>
+        <InfoCard title="Skewness" :val="asset.skewness" :decimals="4" :tooltip="'Skewness displays how symetric the daily log distribution is. Positive Skewness means the median is higher then the average.'"/>
+        <InfoCard title="Kurtosis" :val="asset.kurtosis" :decimals="4" :tooltip="'Kurtosis displays how much the daily log return distribution differs from normal distribution'"/>
       </div>
       <div>
         <PriceChart :values="asset.adj_closes" :currency="asset.currency === 'USD' ? '$' : asset.currency" title="Price History" />

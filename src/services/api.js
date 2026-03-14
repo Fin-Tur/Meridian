@@ -19,7 +19,9 @@ async function api_call(endpoint, method = 'GET', body = null) {
     const data = await checkResponse(response)
     if (data.success) {
       return data.data
-    } else {
+    } else if(data.status === 4041){ //custom Asset Not found status
+      alert('Asset not Found: ' + body.ticker)
+    }else {
       alert('API call failed: ' + data.status)
       return null
     }
