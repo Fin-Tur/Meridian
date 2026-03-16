@@ -10,6 +10,7 @@ import InfoCard from '@/components/InfoCard.vue'
 import Histogram from '@/components/Histogram.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
 import { usePortfolioStore } from '@/stores/counter.js'
+import BackArrow from '@/components/BackArrow.vue'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -40,11 +41,20 @@ const histLabels = computed(() => {
   return labels
 })
 
+function openSettings(){
+  simulation.value = null
+  loading.value = false
+}
+
 </script>
 <template>
   <div class="max-w-6xl mx-auto px-6 py-8">
+      
     <div class="flex items-center justify-between mb-6">
-      <h1 class="text-2xl font-bold">Monte Carlo Simulation</h1>
+      <div class="relative flex items-center">
+        <BackArrow v-if="simulation" @back="openSettings" class="absolute right-full mr-6" />
+        <h1 class="text-2xl font-bold">Monte Carlo Simulation</h1>
+      </div>
       <UnitToggle v-if="simulation" v-model="display_unit" />
     </div>
 
@@ -57,23 +67,23 @@ const histLabels = computed(() => {
       <!-- Stats -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <InfoCard title="Starting Portfolio Value" :val="store.portfolio_value" :type="'currency'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="Median Return" :val="simulation.med_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
-        <InfoCard v-else title="Median Return" :val="(store.pctOfPortfolio(simulation.med_return)/100)-1" :type="'percentile-beneficial'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="Average Return" :val="simulation.avg_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
-        <InfoCard v-else title="Average Return" :val="((store.pctOfPortfolio(simulation.avg_return)-100)/100)" :type="'beneficial-percentile'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="Max Loss" :val="simulation.min-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
-        <InfoCard v-else title="Max Loss" :val="(store.pctOfPortfolio(simulation.min)/100)-1" :type="'percentile-beneficial'" :decimals="2" />
+        <InfoCard v-if="display_unit==='$'" title="Median Return" :val="simulation.med_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Median Return over all simulation values.'"/>
+        <InfoCard v-else title="Median Return" :val="(store.pctOfPortfolio(simulation.med_return)/100)-1" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Median Return over all simulation values.'"/>
+        <InfoCard v-if="display_unit==='$'" title="Average Return" :val="simulation.avg_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Average Return over all simulation values. This may be distored by extreme outliers in the simulation.'"/>
+        <InfoCard v-else title="Average Return" :val="((store.pctOfPortfolio(simulation.avg_return)-100)/100)" :type="'beneficial-percentile'" :decimals="2" :tooltip="'Average Return over all simulation values. This may be distored by extreme outliers in the simulation.'"/>
+        <InfoCard v-if="display_unit==='$'" title="Max Loss" :val="simulation.min-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Maximum Loss over all simulation values.'"/>
+        <InfoCard v-else title="Max Loss" :val="(store.pctOfPortfolio(simulation.min)/100)-1" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Maximum Loss over all simulation values.'"/>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <InfoCard v-if="display_unit==='$'" title="Var 95%" :val="-simulation.var95" :type="'currency-beneficial'" :decimals="2" />
-        <InfoCard v-else title="Var 95%" :val="-store.pctOfPortfolio(simulation.var95)/100" :type="'percentile-beneficial'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="Var 99%" :val="-simulation.var99" :type="'currency-beneficial'" :decimals="2" />
-        <InfoCard v-else title="Var 99%" :val="-store.pctOfPortfolio(simulation.var99)/100" :type="'percentile-beneficial'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="CVaR 95%" :val="-simulation.cvar95" :type="'currency-beneficial'" :decimals="2" />
-        <InfoCard v-else title="CVaR 95%" :val="-store.pctOfPortfolio(simulation.cvar95)/100" :type="'percentile-beneficial'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="CVaR 99%" :val="-simulation.cvar99" :type="'currency-beneficial'" :decimals="2" />
-        <InfoCard v-else title="CVaR 99%" :val="-store.pctOfPortfolio(simulation.cvar99)/100" :type="'percentile-beneficial'" :decimals="2" />
+        <InfoCard v-if="display_unit==='$'" title="Var 95%" :val="-simulation.var95" :type="'currency-beneficial'" :decimals="2" :tooltip="'Value at Risk (95%) over all simulation values.'"/>
+        <InfoCard v-else title="Var 95%" :val="-store.pctOfPortfolio(simulation.var95)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Value at Risk (95%) over all simulation values.'"/>
+        <InfoCard v-if="display_unit==='$'" title="Var 99%" :val="-simulation.var99" :type="'currency-beneficial'" :decimals="2" :tooltip="'Value at Risk (99%) over all simulation values.'"/>
+        <InfoCard v-else title="Var 99%" :val="-store.pctOfPortfolio(simulation.var99)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Value at Risk (99%) over all simulation values.'"/>
+        <InfoCard v-if="display_unit==='$'" title="CVaR 95%" :val="-simulation.cvar95" :type="'currency-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (95%) over all simulation values.'"/>
+        <InfoCard v-else title="CVaR 95%" :val="-store.pctOfPortfolio(simulation.cvar95)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (95%) over all simulation values.'"/>
+        <InfoCard v-if="display_unit==='$'" title="CVaR 99%" :val="-simulation.cvar99" :type="'currency-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (99%) over all simulation values.'"/>
+        <InfoCard v-else title="CVaR 99%" :val="-store.pctOfPortfolio(simulation.cvar99)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (99%) over all simulation values.'"/>
       </div>
 
       <!-- Histogram -->

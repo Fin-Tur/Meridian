@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed } from 'vue'
+import { useAnimatedCounter } from '@/services/utils'
 
 
 const props = defineProps({
@@ -26,27 +27,28 @@ const props = defineProps({
 })
 
 const showTooltip = ref(false)
+const displayVal = useAnimatedCounter(props.val)
 
 const text = computed(() => {
   let str = ''
-  if(props.type.includes("beneficial") && props.val >= 0){
+  if(props.type.includes("beneficial") && displayVal.value >= 0){
     str += '+'
   }
   if(props.type.includes("percentile")){
-    str += (props.val * 100).toFixed(props.decimals) + '%'
+    str += (displayVal.value * 100).toFixed(props.decimals) + '%'
   }
   else if(props.type.includes("currency")){
-    str += '$' + props.val.toLocaleString(undefined, { minimumFractionDigits: props.decimals, maximumFractionDigits: props.decimals })
+    str += '$' + displayVal.value.toLocaleString(undefined, { minimumFractionDigits: props.decimals, maximumFractionDigits: props.decimals })
 
   }else{
-    str += props.val.toFixed(props.decimals)
+    str += displayVal.value.toFixed(props.decimals)
   }
   return str
 })
 
 const text_color = computed(() => {
   if(props.type.includes("beneficial")){
-    return props.val >= 0 ? 'text-positive' : 'text-negative'
+    return displayVal.value >= 0 ? 'text-positive' : 'text-negative'
   }else{
     return ''
   }
@@ -65,7 +67,7 @@ const text_color = computed(() => {
               </svg>
               <Transition name="tooltip-fade">
                 <div v-if="showTooltip"
-                     class="absolute z-10 left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 text-xs text-text-primary bg-bg-secondary border border-border rounded-lg shadow-lg w-48 text-center whitespace-normal pointer-events-none">
+                     class="absolute z-10 left-1/2 -translate-x-1/2 bottom-full mb-2 px-3 py-2 text-sm text-text-primary bg-bg-secondary border border-border rounded-lg shadow-lg w-48 text-center whitespace-normal pointer-events-none">
                   {{ tooltip }}
                 </div>
               </Transition>

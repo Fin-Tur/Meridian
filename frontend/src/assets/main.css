@@ -22,6 +22,8 @@ body {
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
+  background-image: radial-gradient(circle, rgba(220, 218, 231, 0.08) 1px, transparent 1px);
+  background-size: 32px 32px;
 }
 
 /* Scrollbar */

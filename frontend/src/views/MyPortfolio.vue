@@ -8,6 +8,7 @@ import InfoCard from '@/components/InfoCard.vue'
 import SearchBar from '@/components/SearchBar.vue'
 import PieChart from '@/components/PieChart.vue'
 import DataTable from '@/components/DataTable.vue'
+import { useAnimatedCounter } from '@/services/utils'
 
 ChartJS.register(ArcElement, Tooltip, Legend)
 

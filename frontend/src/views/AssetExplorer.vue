@@ -11,6 +11,8 @@ import SearchBar from '@/components/SearchBar.vue'
 import Histogram from '@/components/Histogram.vue'
 import PriceChart from '@/components/PriceChart.vue'
 import AssetCard from '@/components/AssetCard.vue'
+import BackArrow from '@/components/BackArrow.vue'
+import TickerBand from '@/components/TickerBand.vue'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -18,8 +20,18 @@ const symbol = ref('')
 const asset = ref(null)
 const loading = ref(false)
 const searched = ref(false)
+const searchFocused = ref(false)
 
-const featuredSymbols = ['AAPL', 'MSFT', 'GOOGL', 'AMZN', 'TSLA', 'NVDA', 'VGK', 'SPY', 'GLD', 'IWDA.AS', 'EIMI.L']
+const featuredSymbols = [
+  // Aktien
+  'AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA',
+  'BRK-B', 'JPM', 'V', 'UNH', 'XOM', 'LLY', 'AVGO', 'MA',
+  
+  // ETFs
+  'SPY', 'GLD', 'VGK', 'IWDA.AS', 'EIMI.L', 'AGG',
+  // Crypto
+  'BTC-USD', 'ETH-USD', 'BNB-USD', 'SOL-USD', 'XRP-USD'
+]
 const featuredAssets = ref([])
 const featuredLoading = ref(false)
 
@@ -37,6 +49,12 @@ function selectFeatured(sym) {
   search()
 }
 
+function unselect() {
+  asset.value = null
+  symbol.value = ''
+  searched.value = false
+}
+
 onMounted(async () => {
   featuredLoading.value = true
   const results = await Promise.all(
@@ -48,12 +66,16 @@ onMounted(async () => {
 </script>
 
 <template>
+  <div class="explorer-page min-h-screen">
   <div class="max-w-6xl mx-auto px-6 py-8">
-    <h1 class="text-2xl font-bold mb-6">Asset Explorer</h1>
+    <div class="relative flex items-center">
+      <BackArrow v-if="asset" @back="unselect" class="absolute right-full mr-6 mb-6" />
+      <h1 class="text-2xl font-bold mb-6">Asset Explorer</h1>
+    </div>
 
     <!-- Search -->
     <div class="flex gap-3 mb-8">
-      <SearchBar v-model="symbol" :text="'Enter asset symbol (e.g. AAPL)'" @search="search" />
+      <SearchBar v-model="symbol" :text="'Enter asset symbol (e.g. AAPL)'" @search="search" @focused="v => searchFocused = v" />
       <button @click="search" :disabled="loading"
               class="px-5 py-2.5 bg-accent text-white font-semibold text-sm rounded-lg transition hover:bg-accent-hover cursor-pointer disabled:opacity-50">
         {{ loading ? 'Loading…' : 'Search' }}
@@ -61,15 +83,22 @@ onMounted(async () => {
     </div>
 
     <div v-if="!searched && !loading" class="mb-8">
-      <h2 class="text-lg font-semibold text-text-secondary mb-4">Popular Assets</h2>
+      <!-- Ticker band -->
+      <div class="border-4 border-border rounded-md mb-6">
+      <TickerBand v-if="!featuredLoading" :assets="featuredAssets" />
+      </div> 
+      <h2 class="text-lg font-semibold text-text-secondary mb-4 transition-opacity duration-300"
+          :class="{ 'opacity-30': searchFocused }">Popular Assets</h2>
       <div v-if="featuredLoading" class="text-text-secondary text-sm">Loading suggestions…</div>
-      <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div v-else class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 transition-opacity duration-300"
+           :class="{ 'opacity-20 pointer-events-none': searchFocused }">
         <AssetCard
           v-for="a in featuredAssets" :key="a.symbol"
           :symbol="a.symbol"
           :price="a.adj_closes?.[a.adj_closes.length - 1]"
           :currency="a.currency"
           :ytdReturn="a.ytd_return"
+          :sparklineData="a.adj_closes?.slice(-30) ?? []"
           @select="selectFeatured"
         />
       </div>
@@ -108,4 +137,6 @@ onMounted(async () => {
       No data found for this symbol.
     </div>
   </div>
+  </div>
 </template>
+
