@@ -32,6 +32,13 @@ namespace monte_carlo {
         HISTORICAL
     };
 
+    enum class volatility_model {
+        HISTORICAL,
+        EWMA_100,
+        EWMA_75,
+        EWMA_50,
+    };
+
     struct sim_preset {
         double portfolio_value;
 
@@ -39,12 +46,14 @@ namespace monte_carlo {
         std::vector<double> sigma;
         std::vector<double> mu;
         std::vector<double> df;
+        std::vector<double> sigma_sq_ewma;
         Vec weight;
 
         Mat cholesky_cov_mat;
         size_t n_sims;
         size_t horizon_days;
         drift_scenario drift_scenario;
+        volatility_model vol_model;
     };
 
     struct sim_result {
@@ -54,6 +63,7 @@ namespace monte_carlo {
         double cvar_95;
         double cvar_99;
         double avg;
+        double median;
     };
 
     //Portfolio value in USD, weights should be in decimals (0.5 for 50%) 
@@ -69,12 +79,33 @@ namespace monte_carlo {
         preset.mu.reserve(assets.size());
         preset.df.reserve(assets.size());
         preset.drift_scenario = scenario;
+        preset.sigma_sq_ewma.reserve(assets.size());
         preset.weight = Vec::Map(weights.data(), weights.size());
 
+        double lambda;
+        double r = 0.0;
+        double sigma;
+        double sigma_sq;
         for (size_t i = 0; i < assets.size(); i++) {
-            preset.sigma.push_back(asset_compute::volatility(assets[i]));
+
+            //EWMA to simulate dirft-phases : lambda = 0.94 (JP Morgan 1994) | 0.9 for crypto since faster market changes
+            sigma = asset_compute::volatility(assets[i]);
+            sigma_sq = sigma * sigma;
+            for(size_t j = 1; j < assets[i].n_data_points; j++){
+                double r = std::log(assets[i].data_points[j].adjclose / 
+                                    assets[i].data_points[j-1].adjclose);
+                sigma_sq = lambda * sigma_sq + (1 - lambda) * r * r;
+            }
+            
+            preset.sigma.push_back(sigma);
+            preset.sigma_sq_ewma.push_back(sigma_sq);
+            
             preset.mu.push_back(asset_compute::avg_log_return(assets[i])); 
             preset.df.push_back(std::max(asset_compute::dof_excess_kurtosis(assets[i]), 5.0));
+            //preset.df.back() = std::min(5.0, 30.0);
+            //Avoid extremely low dof which can cause instability in the t-distribution. Fat Tails only importanr for low horizons
+            preset.df.back() = preset.df[i] + (30.0 - preset.df[i]) * std::min(1.0, horizon_days / 63.0);
+            
         }
         Mat cov_matrix = asset_compute::compute_covariance_matrix(assets);
         asset_compute::normalize_covariance_matrix(cov_matrix);
@@ -88,7 +119,20 @@ namespace monte_carlo {
         std::vector<double> drifts(preset.n_assets);
         for (size_t k = 0; k < preset.n_assets; ++k) {
             dists.emplace_back(preset.df[k]);
-            drifts[k] = preset.mu[k] - 0.5 * preset.sigma[k] * preset.sigma[k];
+            switch (preset.vol_model) {
+                case volatility_model::HISTORICAL:
+                    drifts[k] = preset.mu[k] - 0.5 * preset.sigma[k] * preset.sigma[k];
+                    break; //Use preset.sigma as is
+                case volatility_model::EWMA_100:
+                    drifts[k] = preset.mu[k] - 0.5 * preset.sigma_sq_ewma[k];
+                    break;
+                case volatility_model::EWMA_75:
+                    drifts[k] = preset.mu[k] - 0.5 * (preset.sigma_sq_ewma[k] * 0.75 + (1 - 0.75) * preset.sigma[k] * preset.sigma[k]);
+                    break;
+                case volatility_model::EWMA_50:
+                    drifts[k] = preset.mu[k] - 0.5 * (preset.sigma_sq_ewma[k] * 0.5 + (1 - 0.5) * preset.sigma[k] * preset.sigma[k]);
+                    break;
+            }
 
             switch(preset.drift_scenario){
                 case drift_scenario::ZERO:
@@ -118,7 +162,23 @@ namespace monte_carlo {
                 }
                 Eps.noalias() = preset.cholesky_cov_mat * Z;
                 for(size_t j = 0; j < preset.n_assets; ++j){
-                    S(j) *= std::exp(drifts[j] + preset.sigma[j] * Eps(j));
+                    switch(preset.vol_model) {
+                        case volatility_model::HISTORICAL:
+                            S(j) *= std::exp(drifts[j] + preset.sigma[j] * Eps(j));
+                            break;
+                        case volatility_model::EWMA_100:
+                            S(j) *= std::exp(drifts[j] + preset.sigma_sq_ewma[j] * Eps(j));
+                            break;
+                        case volatility_model::EWMA_75:
+                            S(j) *= std::exp(drifts[j] + (preset.sigma_sq_ewma[j] * 0.75 + (1 - 0.75) * preset.sigma[j] * preset.sigma[j]) * Eps(j));
+                            break;
+                        case volatility_model::EWMA_50:
+                            S(j) *= std::exp(drifts[j] + (preset.sigma_sq_ewma[j] * 0.5 + (1 - 0.5) * preset.sigma[j] * preset.sigma[j]) * Eps(j));
+                            break;
+                    }
+                    double daily_return = drifts[j] + preset.sigma[j] * Eps(j);
+                    daily_return = std::clamp(daily_return, -0.20, 0.20); //max +- 20% daily return to avoid instability from extreme outliers in t-distribution
+                    S[j] *= std::exp(daily_return);
                 }
             }
             res_out[id*load_size + i] = (S.dot(preset.weight)) * preset.portfolio_value;
@@ -148,6 +208,7 @@ namespace monte_carlo {
         result.cvar_95 = preset.portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.05), 0.0) / (preset.n_sims * 0.05);
         result.cvar_99 = preset.portfolio_value - std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.begin() + static_cast<size_t>(preset.n_sims * 0.01), 0.0) / (preset.n_sims * 0.01);
         result.avg = std::accumulate(result.final_portfolio_values.begin(), result.final_portfolio_values.end(), 0.0) / preset.n_sims;
+        result.median = result.final_portfolio_values[preset.n_sims / 2];
 
 
         return result;

@@ -52,6 +52,11 @@ class server {
                                                 body.value("drift_scenario", "SHRINKAGE_25") == "ZERO" ? monte_carlo::drift_scenario::ZERO :
                                                 body.value("drift_scenario", "SHRINKAGE_25") == "RISK_FREE" ? monte_carlo::drift_scenario::RISK_FREE :
                                                 monte_carlo::drift_scenario::HISTORICAL;
+                monte_carlo::volatility_model vol_model = body.value("volatility_model", "HISTORICAL") == "HISTORICAL" ? monte_carlo::volatility_model::HISTORICAL :
+                                                body.value("volatility_model", "HISTORICAL") == "EWMA_100" ? monte_carlo::volatility_model::EWMA_100 :
+                                                body.value("volatility_model", "HISTORICAL") == "EWMA_75" ? monte_carlo::volatility_model::EWMA_75 :
+                                                body.value("volatility_model", "HISTORICAL") == "EWMA_50" ? monte_carlo::volatility_model::EWMA_50 :
+                                                monte_carlo::volatility_model::HISTORICAL;
 
             std::vector<assets::asset> fetched_assets;
             std::vector<double> weights;
@@ -76,6 +81,7 @@ class server {
 
             // Run Monte Carlo simulation
             auto preset = monte_carlo::generate_sim_preset(fetched_assets, weights, n_sims, horizon_days, portfolio_value, scenario);
+            preset.vol_model = vol_model;
             auto result = monte_carlo::run_simulation(preset);
 
             nlohmann::json response_json;   
@@ -86,12 +92,17 @@ class server {
             response_json["avg"] = result.avg;
             response_json["min"] = result.final_portfolio_values.front();
             response_json["max"] = result.final_portfolio_values.back();
-            double bin_width = (result.final_portfolio_values.back() - result.final_portfolio_values.front()) / 50;
+            response_json["median"] = result.median;
+
+            size_t trim_upper = static_cast<size_t>(result.final_portfolio_values.size() * 0.9); // Cut off extreme outliers for histogram
+            double bin_max = result.final_portfolio_values[trim_upper];
+            double bin_min = result.final_portfolio_values[0];
+            double bin_width = (bin_max - bin_min) / 50;
             response_json["bin_width"] = bin_width;    
             std::vector<int> histogramm_bins(50);
             for(auto& a : result.final_portfolio_values){
-                int bin_index = static_cast<int>((a - result.final_portfolio_values.front()) / bin_width);
-                if(bin_index == 50) bin_index = 49;
+                int bin_index = static_cast<int>((a - bin_min) / bin_width);
+                if(bin_index >= 50) bin_index = 49;
                 histogramm_bins[bin_index]++;
             }
             response_json["histogram_bins"] = histogramm_bins;

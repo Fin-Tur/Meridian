@@ -35,7 +35,7 @@ async function api_call(endpoint, method = 'GET', body = null) {
 
 // Runs monte carlo simulation for the current portfolio.
 // Returns histogram bins, labels, avg_return, min, max, var95, var99, cvar95, cvar99.
-export async function fetch_simulation(n_sims, horizon_days, drift_scenario) {
+export async function fetch_simulation(n_sims, horizon_days, drift_scenario, volatility_scenario) {
   const store = usePortfolioStore()
   const portfolioAssets = store.assets
 
@@ -51,6 +51,7 @@ export async function fetch_simulation(n_sims, horizon_days, drift_scenario) {
     n_simulations: n_sims,
     assets: assetDataList,
     drift_scenario: drift_scenario,
+    volatility_scenario: volatility_scenario,
   })
 
   if (!raw) return null
@@ -62,13 +63,14 @@ export async function fetch_simulation(n_sims, horizon_days, drift_scenario) {
 
   return {
     avg_return: raw.avg,
+    med_return: raw.median,
     min: raw.min,
     max: raw.max,
     var95: raw.var_95,
     var99: raw.var_99,
     cvar95: raw.cvar_95,
     cvar99: raw.cvar_99,
-    bins: raw.histogram_bins,
+    bins: raw.histogram_bins.slice(0, -1), // Exclude last edge
     bin_width: raw.bin_width,
     labels,
   }

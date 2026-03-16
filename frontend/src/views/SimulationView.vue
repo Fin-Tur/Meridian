@@ -20,11 +20,12 @@ const store = usePortfolioStore()
 const n_sims = ref(1000)
 const horizon_days = ref(30)
 const drift_scenario = ref('SHRINKAGE_25')
+const volatility_scenario = ref('EMWA_75')
 const display_unit = ref('$')
 
 async function start_simulation(){
   loading.value = true
-  simulation.value = await fetch_simulation(n_sims.value, horizon_days.value, drift_scenario.value)
+  simulation.value = await fetch_simulation(n_sims.value, horizon_days.value, drift_scenario.value, volatility_scenario.value)
   loading.value = false
 }
 
@@ -56,12 +57,12 @@ const histLabels = computed(() => {
       <!-- Stats -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         <InfoCard title="Starting Portfolio Value" :val="store.portfolio_value" :type="'currency'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="Max Loss" :val="simulation.min-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
-        <InfoCard v-else title="Max Loss" :val="(store.pctOfPortfolio(simulation.min)/100)-1" :type="'percentile-beneficial'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="Max Win" :val="simulation.max-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
-        <InfoCard v-else title="Max Win" :val="(store.pctOfPortfolio(simulation.max)/100)-1" :type="'percentile-beneficial'" :decimals="2" />
+        <InfoCard v-if="display_unit==='$'" title="Median Return" :val="simulation.med_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
+        <InfoCard v-else title="Median Return" :val="(store.pctOfPortfolio(simulation.med_return)/100)-1" :type="'percentile-beneficial'" :decimals="2" />
         <InfoCard v-if="display_unit==='$'" title="Average Return" :val="simulation.avg_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
         <InfoCard v-else title="Average Return" :val="((store.pctOfPortfolio(simulation.avg_return)-100)/100)" :type="'beneficial-percentile'" :decimals="2" />
+        <InfoCard v-if="display_unit==='$'" title="Max Loss" :val="simulation.min-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" />
+        <InfoCard v-else title="Max Loss" :val="(store.pctOfPortfolio(simulation.min)/100)-1" :type="'percentile-beneficial'" :decimals="2" />
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
@@ -111,6 +112,15 @@ const histLabels = computed(() => {
               <option value="HISTORICAL">Historical</option>
               <option value="RISK_FREE">Risk Free</option>
               </select>
+        </div>
+        <div>
+          <label class="block text-xs text-text-secondary mb-1">Volatility Scenario</label>
+          <select v-model="volatility_scenario" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
+            <option value="HISTORICAL">Historical</option>
+            <option value="EMWA_100">EWMA 100%</option>
+            <option value="EMWA_75">EWMA 75%</option>
+            <option value="EMWA_50">EWMA 50%</option>
+            </select>
         </div>
         </div>
 
