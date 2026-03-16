@@ -1,0 +1,328 @@
+\documentclass[12pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[ngerman]{babel}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{lmodern}
+
+\geometry{margin=2.5cm}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue!60!black,
+    urlcolor=blue!60!black,
+}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries\color{blue!60!black}}{}{0em}{}
+
+\title{
+    \textbf{Meridian} \\[0.5em]
+    \large Mathematische Grundlagen und Formelreferenz \\[0.3em]
+    \normalsize Monte-Carlo-basierte Portfoliorisikoanalyse
+}
+\author{}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+\tableofcontents
+\newpage
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Überblick}
+
+Meridian simuliert die zukünftige Wertentwicklung eines Portfolios bestehend aus
+mehreren Assets (Aktien, Kryptowährungen) mittels einer \textbf{Monte-Carlo-Simulation}
+auf Basis der geometrischen Brownschen Bewegung (GBM). Für jedes Asset werden
+historische Marktdaten verwendet, um die statistischen Parameter ($\mu$, $\sigma$,
+Korrelationsmatrix) zu schätzen. Die simulierten Endwerte des Portfolios werden
+genutzt, um Risikomaße wie VaR und CVaR zu berechnen.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Renditeberechnung}
+
+\subsection{Log-Rendite}
+
+Die tägliche Log-Rendite eines Assets wird definiert als:
+
+\begin{equation}
+    r_t = \ln\!\left(\frac{P_t}{P_{t-1}}\right)
+\end{equation}
+
+\textbf{Erklärung:} Log-Renditen sind symmetrisch um Null und additiv über
+mehrere Perioden (im Gegensatz zu einfachen prozentualen Renditen). Sie
+entsprechen der stetigen Verzinsung und sind die natürliche Wahl für GBM-basierte
+Modelle, da GBM von normalverteilten Log-Renditen ausgeht.
+
+\subsection{Mittlere Log-Rendite}
+
+\begin{equation}
+    \mu = \frac{1}{n-1} \sum_{t=1}^{n-1} r_t
+\end{equation}
+
+\textbf{Erklärung:} Der Schätzer für den Erwartungswert der täglichen Log-Rendite.
+Er wird als täglicher Drift-Parameter $\mu$ in das GBM eingesetzt.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Volatilität}
+
+\subsection{Historische Volatilität}
+
+\begin{equation}
+    \sigma = \sqrt{\frac{1}{n-1} \sum_{t=1}^{n-1} \left(r_t - \mu\right)^2}
+\end{equation}
+
+\textbf{Erklärung:} Die Volatilität ist die Standardabweichung der täglichen
+Log-Renditen und ein Maß für das Risiko eines Assets. Ein größeres $\sigma$
+bedeutet stärkere Schwankungen des Preises. Der Nenner $n-1$ anstatt $n$
+liefert den unverzerrten Schätzer (Bessel-Korrektur).
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Kovarianzmatrix und Korrelation}
+
+\subsection{Kovarianz}
+
+Die Kovarianz zwischen zwei Assets $i$ und $j$ misst, wie stark ihre Renditen
+gemeinsam schwanken:
+
+\begin{equation}
+    \text{Cov}(r^{(i)},\, r^{(j)}) = \frac{1}{n-1} \sum_{k=1}^{n}
+    \left(r^{(i)}_k - \mu_i\right)\!\left(r^{(j)}_k - \mu_j\right)
+\end{equation}
+
+Wichtig: Die Summe läuft nur über \textbf{Tage, an denen beide Assets gehandelt
+wurden} (zeitlich ausgerichtete Paare). Mittelwerte $\mu_i$, $\mu_j$ werden
+ebenfalls aus dieser Teilmenge berechnet.
+
+\textbf{Erklärung:}
+\begin{itemize}[leftmargin=1.5em]
+    \item $\text{Cov} > 0$: Assets bewegen sich tendenziell in die gleiche Richtung.
+    \item $\text{Cov} < 0$: Assets bewegen sich tendenziell entgegen.
+    \item $\text{Cov} = 0$: Keine lineare Abhängigkeit.
+\end{itemize}
+
+\subsection{Kovarianzmatrix}
+
+Für ein Portfolio aus $m$ Assets ergibt sich die \textbf{symmetrische, positiv
+semidefinite} Kovarianzmatrix:
+
+\begin{equation}
+    \boldsymbol{\Sigma} = \begin{pmatrix}
+        \text{Cov}(r^{(1)},r^{(1)}) & \cdots & \text{Cov}(r^{(1)},r^{(m)}) \\
+        \vdots & \ddots & \vdots \\
+        \text{Cov}(r^{(m)},r^{(1)}) & \cdots & \text{Cov}(r^{(m)},r^{(m)})
+    \end{pmatrix}
+\end{equation}
+
+Die Diagonalelement $\Sigma_{ii} = \text{Var}(r^{(i)}) = \sigma_i^2$ ist die
+Varianz des $i$-ten Assets.
+
+\subsection{Normalisierung zur Korrelationsmatrix}
+
+Die Kovarianzmatrix wird auf eine \textbf{Korrelationsmatrix} $\mathbf{P}$
+normalisiert:
+
+\begin{equation}
+    \rho_{ij} = \frac{\Sigma_{ij}}{\sqrt{\Sigma_{ii} \cdot \Sigma_{jj}}}
+    = \frac{\text{Cov}(r^{(i)},r^{(j)})}{\sigma_i \cdot \sigma_j}
+\end{equation}
+
+\textbf{Erklärung:} Der Korrelationskoeffizient $\rho_{ij} \in [-1, 1]$ ist
+dimensionslos und erlaubt den direkten Vergleich zwischen Asset-Paaren unabhängig
+von der absoluten Preishöhe. $\rho_{ij} = 1$: perfekte positive Korrelation;
+$\rho_{ij} = -1$: perfekte negative Korrelation.
+
+\subsection{Cholesky-Zerlegung}
+
+Die normalisierte Kovarianzmatrix (Korrelationsmatrix) wird Cholesky-zerlegt:
+
+\begin{equation}
+    \mathbf{P} = \mathbf{L} \mathbf{L}^\top
+\end{equation}
+
+wobei $\mathbf{L}$ eine untere Dreiecksmatrix ist.
+
+\textbf{Erklärung:} Die Cholesky-Zerlegung wird verwendet, um aus unabhängigen
+Zufallsvariablen \textbf{korrelierte} Zufallsvariablen zu erzeugen. Wenn
+$\mathbf{Z}$ ein Vektor unabhängiger Zufallsvariablen mit Varianz 1 ist, dann
+hat $\boldsymbol{\varepsilon} = \mathbf{L} \mathbf{Z}$ die gewünschte
+Kovarianzstruktur $\mathbf{P}$. Die Zerlegung existiert genau dann, wenn
+$\mathbf{P}$ positiv definit ist.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Schwanzverteilung: Excess Kurtosis und Student-t}
+
+\subsection{Excess Kurtosis}
+
+Die \textbf{Excess Kurtosis} (Exzess-Wölbung) misst, wie „fett" die
+Verteilungsenden (Tails) im Vergleich zu einer Normalverteilung sind:
+
+\begin{equation}
+    \kappa = \frac{1}{n-1} \sum_{t=1}^{n-1} \left(\frac{r_t - \mu}{\sigma}\right)^4 - 3
+\end{equation}
+
+\textbf{Erklärung:}
+\begin{itemize}[leftmargin=1.5em]
+    \item $\kappa = 0$: Normalverteilung (Mesokurtisch).
+    \item $\kappa > 0$: Leptokurtisch. Fettere Tails — extreme Ereignisse treten
+          häufiger auf als in der Normalverteilung. Typisch für Finanzzeitreihen.
+    \item $\kappa < 0$: Platykurtisch. Dünnere Tails.
+\end{itemize}
+
+\subsection{Freiheitsgrade der Student-t-Verteilung}
+
+Aus der Excess Kurtosis werden die Freiheitsgrade $\nu$ der Student-t-Verteilung
+geschätzt:
+
+\begin{equation}
+    \nu = 4 + \frac{6}{\kappa}, \qquad \kappa > 0
+\end{equation}
+
+Ist $4 + 6/\kappa \leq 0$ (d.\,h.\ $\kappa$ sehr klein oder negativ), wird
+$\nu \to \infty$ gesetzt, was einer Normalverteilung entspricht.
+
+\textbf{Erklärung:} Die Student-t-Verteilung mit $\nu$ Freiheitsgraden hat fettere
+Tails als die Normalverteilung. Sie modelliert besser die empirisch beobachtbare
+Häufung extremer Renditen (Crashs, Sprünge). Für $\nu \to \infty$ konvergiert
+sie zur Normalverteilung.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Monte-Carlo-Simulation}
+
+\subsection{Geometrische Brownsche Bewegung (GBM)}
+
+Jeder Asset-Preis $S_j$ wird täglich durch den folgenden diskreten GBM-Schritt
+fortgeschrieben:
+
+\begin{equation}
+    S_j(t + \Delta t) = S_j(t) \cdot \exp\!\left[
+        \left(\mu_j - \frac{\sigma_j^2}{2}\right)\Delta t
+        \;+\;
+        \sigma_j \cdot \varepsilon_j \cdot \sqrt{\Delta t}
+    \right]
+\end{equation}
+
+mit $\Delta t = \frac{1}{252}$ (ein Handelstag in Jahren, da 252 Handelstage
+pro Jahr).
+
+\textbf{Erklärung:}
+\begin{itemize}[leftmargin=1.5em]
+    \item $\mu_j - \frac{\sigma_j^2}{2}$: \textbf{Itô-Korrektur} (auch Drift-Korrektur).
+          Die GBM ist im Log-Raum definiert; die $-\sigma^2/2$-Korrektur stellt
+          sicher, dass der Erwartungswert von $S$ korrekt ist (Itô-Lemma).
+    \item $\sigma_j \cdot \varepsilon_j \cdot \sqrt{\Delta t}$: Stochastischer Term.
+          Die Streuung des Preises wächst proportional zu $\sqrt{\Delta t}$
+          (Diffusionseigenschaft der Brownschen Bewegung).
+\end{itemize}
+
+\subsection{Korrelierte Zufallsvariablen}
+
+Die asset-spezifischen Schocks $\varepsilon_j$ werden korreliert erzeugt:
+
+\begin{equation}
+    \boldsymbol{\varepsilon} = \mathbf{L} \cdot \mathbf{Z},
+    \qquad Z_k \sim t_{\nu_k}(0, 1)
+\end{equation}
+
+wobei:
+\begin{itemize}[leftmargin=1.5em]
+    \item $\mathbf{Z}$: Vektor unabhängiger, standardisierter Student-t-Zufallsvariablen,
+          je Asset mit individuellen Freiheitsgraden $\nu_k$.
+    \item $\mathbf{L}$: Untere Cholesky-Dreiecksmatrix der Korrelationsmatrix.
+    \item $\boldsymbol{\varepsilon}$: Resultierender Vektor mit der gewünschten
+          Korrelationsstruktur $\text{Cov}(\boldsymbol{\varepsilon}) = \mathbf{L}\mathbf{L}^\top = \mathbf{P}$.
+\end{itemize}
+
+\subsection{Portfoliowert}
+
+Der Portfoliowert am Ende eines Simulationspfades ist die gewichtete Summe der
+Einzelkurse:
+
+\begin{equation}
+    V = \sum_{j=1}^{m} w_j \cdot S_j
+    = \mathbf{w}^\top \mathbf{S}
+\end{equation}
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Risikomaße}
+
+\subsection{Value at Risk (VaR)}
+
+Der \textbf{Value at Risk} zum Konfidenzniveau $(1-\alpha)$ ist das
+$\alpha$-Quantil der Verteilung der Portfolioendwerte:
+
+\begin{equation}
+    \text{VaR}_\alpha = F_V^{-1}(\alpha)
+\end{equation}
+
+In der Simulation wird das $\alpha$-Quantil empirisch über die sortierten
+Portfolioendwerte bestimmt:
+
+\begin{equation}
+    \text{VaR}_\alpha \approx \text{sorted}(V)\!\left[\lfloor \alpha \cdot N \rfloor\right]
+\end{equation}
+
+\textbf{Erklärung:} $\text{VaR}_{0{,}05}$ bedeutet: Mit 95\,\% Wahrscheinlichkeit
+liegt der Portfoliowert nach dem Simulationshorizont \emph{über} diesem Wert.
+Anders gesagt: Im schlechtesten 5\,\% der Fälle fällt der Wert unter $\text{VaR}_{0{,}05}$.
+
+\subsection{Conditional Value at Risk (CVaR) / Expected Shortfall}
+
+Der \textbf{CVaR} (auch Expected Shortfall, ES) ist der \emph{Erwartungswert}
+des Portfoliowertes, \emph{gegeben} dass er unter dem VaR liegt:
+
+\begin{equation}
+    \text{CVaR}_\alpha = \mathbb{E}\!\left[V \,\Big|\, V \leq \text{VaR}_\alpha\right]
+    \approx \frac{1}{\lfloor \alpha N \rfloor + 1}
+    \sum_{k=0}^{\lfloor \alpha N \rfloor} \text{sorted}(V)[k]
+\end{equation}
+
+\textbf{Erklärung:} CVaR ist ein kohärenteres Risikomaß als VaR, da es nicht
+nur fragt „ab wann wird es schlimm?" sondern auch „wie schlimm wird es im
+Durchschnitt, wenn es schlimm wird?". Er berücksichtigt die Form der Verteilung
+im Tail.
+
+% ─────────────────────────────────────────────────────────────────────────────
+\section{Glossar der Variablen}
+
+\renewcommand{\arraystretch}{1.4}
+\begin{tabular}{>{\bfseries}p{2.5cm} p{3.5cm} p{8cm}}
+    \toprule
+    \textbf{Symbol} & \textbf{Einheit / Typ} & \textbf{Bedeutung} \\
+    \midrule
+    $P_t$       & Preis [USD]         & Bereinigter Schlusskurs (\emph{adjusted close}) des Assets zum Zeitpunkt $t$ \\
+    $r_t$       & dimensionslos       & Log-Rendite von $t-1$ nach $t$: $\ln(P_t / P_{t-1})$ \\
+    $n$         & ganze Zahl          & Anzahl der historischen Datenpunkte \\
+    $\mu$       & 1/Tag               & Mittlere tägliche Log-Rendite (Drift-Parameter) \\
+    $\sigma$    & 1/$\sqrt{\text{Tag}}$ & Tägliche Volatilität (Standardabweichung der Log-Renditen) \\
+    $\kappa$    & dimensionslos       & Excess Kurtosis der Log-Renditenverteilung \\
+    $\nu$       & dimensionslos       & Freiheitsgrade der Student-t-Verteilung \\
+    $\boldsymbol{\Sigma}$ & Matrix    & Kovarianzmatrix der Log-Renditen aller Assets \\
+    $\mathbf{P}$ & Matrix             & Normalisierte Kovarianzmatrix (Korrelationsmatrix), $\rho_{ij} \in [-1,1]$ \\
+    $\rho_{ij}$ & dimensionslos       & Korrelationskoeffizient zwischen Asset $i$ und Asset $j$ \\
+    $\mathbf{L}$ & untere Dreiecksmat.& Cholesky-Faktor: $\mathbf{P} = \mathbf{L}\mathbf{L}^\top$ \\
+    $\mathbf{Z}$ & Vektor             & Vektor unabhängiger Student-t-Zufallsziehungen \\
+    $\boldsymbol{\varepsilon}$ & Vektor & Korrelierter Zufallsvektor: $\mathbf{L}\mathbf{Z}$ \\
+    $S_j(t)$    & Preis [USD]         & Simulierter Kurs von Asset $j$ zum Zeitpunkt $t$ \\
+    $\Delta t$  & Jahre               & Zeitschritt der Simulation: $1/252$ \\
+    $m$         & ganze Zahl          & Anzahl der Assets im Portfolio \\
+    $w_j$       & dimensionslos       & Gewicht von Asset $j$ im Portfolio ($\sum w_j = 1$) \\
+    $V$         & Preis [USD]         & Gesamter Portfoliowert am Ende des Simulationshorizonts \\
+    $N$         & ganze Zahl          & Anzahl der Monte-Carlo-Simulationspfade \\
+    $\alpha$    & dimensionslos       & Signifikanzniveau für VaR/CVaR (z.\,B.\ $0{,}05$ für 95\,\%-VaR) \\
+    $\text{VaR}_\alpha$ & Preis [USD] & Value at Risk: $\alpha$-Quantil der simulierten Portfolioendwerte \\
+    $\text{CVaR}_\alpha$ & Preis [USD] & Conditional VaR: Erwartungswert der Portfolioendwerte unterhalb $\text{VaR}_\alpha$ \\
+    \bottomrule
+\end{tabular}
+
+\end{document}
