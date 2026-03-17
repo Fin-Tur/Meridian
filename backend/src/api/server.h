@@ -48,7 +48,7 @@ class server {
                 double portfolio_value = body.at("portfolio_value").get<double>();
                 size_t horizon_days = body.value("horizon_days", 252);
                 size_t n_sims = body.value("n_simulations", 1000);
-                monte_carlo::drift_scenario scenario = body.value("drift_scenario", "SHRINKAGE_25") == "SHRINKAGE_25" ? monte_carlo::drift_scenario::SHRINKAGE_25 : 
+                monte_carlo::drift_scenario drift_scenario = body.value("drift_scenario", "SHRINKAGE_25") == "SHRINKAGE_25" ? monte_carlo::drift_scenario::SHRINKAGE_25 : 
                                                 body.value("drift_scenario", "SHRINKAGE_25") == "ZERO" ? monte_carlo::drift_scenario::ZERO :
                                                 body.value("drift_scenario", "SHRINKAGE_25") == "RISK_FREE" ? monte_carlo::drift_scenario::RISK_FREE :
                                                 monte_carlo::drift_scenario::HISTORICAL;
@@ -80,9 +80,15 @@ class server {
             }
 
             // Run Monte Carlo simulation
-            auto preset = monte_carlo::generate_sim_preset(fetched_assets, weights, n_sims, horizon_days, portfolio_value, scenario);
-            preset.vol_model = vol_model;
-            auto result = monte_carlo::run_simulation(preset);
+            
+            monte_carlo::sim_config config = {
+                .vol_model = vol_model,
+                .drift_scenario = drift_scenario,
+                .boost_correlations = body.value("boost_correlations", 1.0),
+                .multivariate_t = body.value("multivariate_t", false)
+            };
+            auto preset = monte_carlo::generate_sim_preset(fetched_assets, weights, n_sims, horizon_days,  config, portfolio_value);
+            auto result = monte_carlo::run_simulation(preset, config);
 
             nlohmann::json response_json;   
             response_json["var_95"] = result.var_95;

@@ -10,6 +10,7 @@
 #include <thread>
 #include "../models/assets.h"
 #include "asset_computing.h"
+#include "../models/coins.h"
 
 #define Mat Eigen::MatrixXd
 #define Vec Eigen::VectorXd
@@ -39,6 +40,14 @@ namespace monte_carlo {
         EWMA_50,
     };
 
+    struct sim_config {
+        volatility_model vol_model;
+        drift_scenario drift_scenario;
+        double boost_correlations = 1.0;
+        bool multivariate_t;
+        //regimes 
+    };
+
     struct sim_preset {
         double portfolio_value;
 
@@ -46,14 +55,12 @@ namespace monte_carlo {
         std::vector<double> sigma;
         std::vector<double> mu;
         std::vector<double> df;
-        std::vector<double> sigma_sq_ewma;
+        std::vector<double> sigma_ewma;
         Vec weight;
 
         Mat cholesky_cov_mat;
         size_t n_sims;
         size_t horizon_days;
-        drift_scenario drift_scenario;
-        volatility_model vol_model;
     };
 
     struct sim_result {
@@ -67,7 +74,7 @@ namespace monte_carlo {
     };
 
     //Portfolio value in USD, weights should be in decimals (0.5 for 50%) 
-    sim_preset generate_sim_preset(std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days, double portfolio_value = 1000, drift_scenario scenario = drift_scenario::SHRINKAGE_25){
+    sim_preset generate_sim_preset(std::vector<assets::asset>& assets, const std::vector<double>& weights, size_t n_sims, size_t horizon_days,  const sim_config& config, double portfolio_value = 1000){
         sim_preset preset;
         data_fetcher::unify_asset_currencies(assets, currency::USD);
         preset.n_sims = n_sims;
@@ -78,8 +85,7 @@ namespace monte_carlo {
         preset.sigma.reserve(assets.size());
         preset.mu.reserve(assets.size());
         preset.df.reserve(assets.size());
-        preset.drift_scenario = scenario;
-        preset.sigma_sq_ewma.reserve(assets.size());
+        preset.sigma_ewma.reserve(assets.size());
         preset.weight = Vec::Map(weights.data(), weights.size());
 
         double lambda;
@@ -89,6 +95,7 @@ namespace monte_carlo {
         for (size_t i = 0; i < assets.size(); i++) {
 
             //EWMA to simulate dirft-phases : lambda = 0.94 (JP Morgan 1994) | 0.9 for crypto since faster market changes
+            lambda = coin::is_crypto(assets[i].symbol) ? 0.90 : 0.94;
             sigma = asset_compute::volatility(assets[i]);
             sigma_sq = sigma * sigma;
             for(size_t j = 1; j < assets[i].n_data_points; j++){
@@ -98,7 +105,7 @@ namespace monte_carlo {
             }
             
             preset.sigma.push_back(sigma);
-            preset.sigma_sq_ewma.push_back(sigma_sq);
+            preset.sigma_ewma.push_back(std::sqrt(sigma_sq));
             
             preset.mu.push_back(asset_compute::avg_log_return(assets[i])); 
             preset.df.push_back(std::max(asset_compute::dof_excess_kurtosis(assets[i]), 5.0));
@@ -108,33 +115,44 @@ namespace monte_carlo {
             
         }
         Mat cov_matrix = asset_compute::compute_covariance_matrix(assets);
+        
+        if(config.boost_correlations != 1){
+            for(size_t i = 0; i < preset.n_assets; i++){
+                for(size_t j = 0; j < preset.n_assets; j++){
+                    if(i != j){
+                        cov_matrix(i,j) = cov_matrix(i,j) * config.boost_correlations + (1 - config.boost_correlations);
+                    }
+                }
+            }
+        }
+        
         asset_compute::normalize_covariance_matrix(cov_matrix);
         preset.cholesky_cov_mat = asset_compute::cholesky_decomp(cov_matrix);
         return preset;
     }
 
-    void simulation_job(const sim_preset& preset, unsigned int id, int32_t load_size, double* res_out){
+    void simulation_job(const sim_preset& preset, const sim_config& config, unsigned int id, int32_t load_size, double* res_out){
         std::vector<std::student_t_distribution<double>> dists;
         dists.reserve(preset.n_assets);
         std::vector<double> drifts(preset.n_assets);
         for (size_t k = 0; k < preset.n_assets; ++k) {
             dists.emplace_back(preset.df[k]);
-            switch (preset.vol_model) {
+            switch (config.vol_model) {
                 case volatility_model::HISTORICAL:
                     drifts[k] = preset.mu[k] - 0.5 * preset.sigma[k] * preset.sigma[k];
                     break; //Use preset.sigma as is
                 case volatility_model::EWMA_100:
-                    drifts[k] = preset.mu[k] - 0.5 * preset.sigma_sq_ewma[k];
+                    drifts[k] = preset.mu[k] - 0.5 * preset.sigma_ewma[k]*preset.sigma_ewma[k];
                     break;
                 case volatility_model::EWMA_75:
-                    drifts[k] = preset.mu[k] - 0.5 * (preset.sigma_sq_ewma[k] * 0.75 + (1 - 0.75) * preset.sigma[k] * preset.sigma[k]);
+                    drifts[k] = preset.mu[k] - 0.5 * (preset.sigma_ewma[k]*preset.sigma_ewma[k] * 0.75 + (1 - 0.75) * preset.sigma[k] * preset.sigma[k]);
                     break;
                 case volatility_model::EWMA_50:
-                    drifts[k] = preset.mu[k] - 0.5 * (preset.sigma_sq_ewma[k] * 0.5 + (1 - 0.5) * preset.sigma[k] * preset.sigma[k]);
+                    drifts[k] = preset.mu[k] - 0.5 * (preset.sigma_ewma[k]*preset.sigma_ewma[k] * 0.5 + (1 - 0.5) * preset.sigma[k] * preset.sigma[k]);
                     break;
             }
 
-            switch(preset.drift_scenario){
+            switch(config.drift_scenario){
                 case drift_scenario::ZERO:
                     drifts[k] = 0.0;
                     break;
@@ -162,40 +180,37 @@ namespace monte_carlo {
                 }
                 Eps.noalias() = preset.cholesky_cov_mat * Z;
                 for(size_t j = 0; j < preset.n_assets; ++j){
-                    switch(preset.vol_model) {
+                    switch(config.vol_model) {
                         case volatility_model::HISTORICAL:
                             S(j) *= std::exp(drifts[j] + preset.sigma[j] * Eps(j));
                             break;
                         case volatility_model::EWMA_100:
-                            S(j) *= std::exp(drifts[j] + preset.sigma_sq_ewma[j] * Eps(j));
+                            S(j) *= std::exp(drifts[j] + preset.sigma_ewma[j] * Eps(j));
                             break;
                         case volatility_model::EWMA_75:
-                            S(j) *= std::exp(drifts[j] + (preset.sigma_sq_ewma[j] * 0.75 + (1 - 0.75) * preset.sigma[j] * preset.sigma[j]) * Eps(j));
+                            S(j) *= std::exp(drifts[j] + preset.sigma_ewma[j] * 0.75 + (1 - 0.75) * preset.sigma[j] * preset.sigma[j]) * Eps(j);
                             break;
                         case volatility_model::EWMA_50:
-                            S(j) *= std::exp(drifts[j] + (preset.sigma_sq_ewma[j] * 0.5 + (1 - 0.5) * preset.sigma[j] * preset.sigma[j]) * Eps(j));
+                            S(j) *= std::exp(drifts[j] + preset.sigma_ewma[j] * 0.5 + (1 - 0.5) * preset.sigma[j] * preset.sigma[j]) * Eps(j);
                             break;
                     }
-                    double daily_return = drifts[j] + preset.sigma[j] * Eps(j);
-                    daily_return = std::clamp(daily_return, -0.20, 0.20); //max +- 20% daily return to avoid instability from extreme outliers in t-distribution
-                    S[j] *= std::exp(daily_return);
                 }
             }
             res_out[id*load_size + i] = (S.dot(preset.weight)) * preset.portfolio_value;
         }
     }
 
-    sim_result run_simulation(const sim_preset& preset){
+    sim_result run_simulation(const sim_preset& preset, const sim_config& config){
         sim_result result;
         result.final_portfolio_values.resize(preset.n_sims);
         unsigned int n_threads = std::thread::hardware_concurrency() > 0 ? std::thread::hardware_concurrency() : 4;
         std::vector<std::thread> threads;
         int32_t load_size = static_cast<int32_t>(preset.n_sims / n_threads);
         for(unsigned int i = 0; i < n_threads; ++i){
-            threads.emplace_back(simulation_job, std::cref(preset), i, load_size, result.final_portfolio_values.data());
+            threads.emplace_back(simulation_job, std::cref(preset), std::cref(config), i, load_size, result.final_portfolio_values.data());
         }
         //work on remaining simulations in main thread if n_sims is not perfectly divisible by n_threads
-        simulation_job(std::cref(preset), n_threads, load_size, result.final_portfolio_values.data());
+        simulation_job(std::cref(preset), std::cref(config), n_threads, load_size, result.final_portfolio_values.data());
 
         for(auto& t : threads){
             t.join();

@@ -64,7 +64,7 @@ namespace data_fetcher {
 
     // Uses CoinGecko market_chart endpoint with daily interval to ensure timestamp
     // alignment with stock data from Yahoo Finance (both return one data point per calendar day).
-    assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 300) {
+    /*assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 300) {
         size_t day = std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24;
         if(stock_cache.contains(coinId)){
             auto& [cached_asset, last_fetched_day] = stock_cache[coinId];
@@ -112,7 +112,95 @@ namespace data_fetcher {
             };
         }
         return a;
+    }*/
+
+    //Kraken Coin API for History up to 720 Days
+    assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 1440) {
+        size_t day = std::chrono::duration_cast<std::chrono::hours>(
+            std::chrono::system_clock::now().time_since_epoch()).count() / 24;
+
+        if (stock_cache.contains(coinId)) {
+            auto& [cached_asset, last_fetched_day] = stock_cache[coinId];
+            if (day - last_fetched_day < 1) {
+                return cached_asset;
+            }
+        }
+
+        httplib::SSLClient client("api.kraken.com");
+        client.set_default_headers({{"User-Agent", "Meridian/1.0"}});
+
+        // Kraken uses its own pair naming, e.g. "XBTUSD", "ETHUSD"
+        // coinId should be the Kraken pair string (e.g. "XBTUSD")
+        // interval=1440 = daily candles (in minutes)
+        // since = unix timestamp of (now - days)
+        long long since = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count()
+            - static_cast<long long>(days) * 86400LL;
+
+        std::string path = "/0/public/OHLC?pair=";
+        path += coinId;
+        path += "&interval=1440&since=" + std::to_string(since);
+
+        auto res = client.Get(path.c_str());
+        if (!res || res->status != 200) {
+            std::cerr << "Failed to fetch data for " << symbol
+                    << ". HTTP Status: "
+                    << (res ? std::to_string(res->status) : "No Response")
+                    << std::endl;
+            return assets::asset{};
+        }
+
+        auto j = nlohmann::json::parse(res->body);
+
+        if (j.contains("error") && !j["error"].empty()) {
+            std::cerr << "Kraken API error for " << symbol << ": "
+                    << j["error"].dump() << std::endl;
+            return assets::asset{};
+        }
+
+        // Response: { "result": { "XBTUSD": [[time, open, high, low, close, vwap, volume, count], ...], "last": ... } }
+        auto& result = j["result"];
+        // Get first key that isn't "last"
+        nlohmann::json* candles = nullptr;
+        for (auto it = result.begin(); it != result.end(); ++it) {
+            if (it.key() != "last") {
+                candles = &it.value();
+                break;
+            }
+        }
+
+        if (!candles || candles->empty()) {
+            std::cerr << "No candle data for " << symbol << std::endl;
+            return assets::asset{};
     }
+
+    assets::asset a;
+    a.symbol = symbol;
+    a.n_data_points = candles->size();
+    a.data_points = new assets::data_point[a.n_data_points];
+    a.currency = convert_curr_fstr("USD");
+
+    for (size_t i = 0; i < candles->size(); i++) {
+        auto& candle = (*candles)[i];
+        // [time, open, high, low, close, vwap, volume, count]
+        // Kraken returns numbers as strings in OHLC!
+        double high  = std::stod(candle[2].get<std::string>());
+        double low   = std::stod(candle[3].get<std::string>());
+        double close = std::stod(candle[4].get<std::string>());
+
+        uint32_t ts = static_cast<uint32_t>(candle[0].get<long long>() / 86400LL);
+
+        a.data_points[i] = assets::data_point{
+            .low      = low,
+            .high     = high,
+            .adjclose = close,
+            .timestamp = ts
+        };
+    }
+
+    stock_cache[coinId] = {a, day};
+    return a;
+}
 
     double fetch_fx_rate(const currency& from_currency, currency to_currency = currency::USD) {
         
