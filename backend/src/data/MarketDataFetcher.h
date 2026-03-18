@@ -38,10 +38,11 @@ namespace data_fetcher {
         auto j   = nlohmann::json::parse(res->body);
 
         auto& quote  = j["chart"]["result"][0]["indicators"]["quote"][0];
-        auto& highs  = quote["high"];
-        auto& lows   = quote["low"];
-        auto& closes = j["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"];
+        auto& closesRaw = j["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"];
         auto& timestamps = j["chart"]["result"][0]["timestamp"];
+
+        auto closes = closesRaw.get<std::vector<double>>();
+        closes.erase(std::remove_if(closes.begin(), closes.end(), [](double v){ return std::isnan(v) || v <= 0.0; }), closes.end());
 
         assets::asset a;
         a.symbol = symbol;
@@ -50,11 +51,8 @@ namespace data_fetcher {
         a.currency = convert_curr_fstr(j["chart"]["result"][0]["meta"]["currency"].get<std::string>());
 
         for (size_t i = 0; i < closes.size(); i++) {
-            if (closes[i].is_null() || highs[i].is_null() || lows[i].is_null()) continue;
             a.data_points[i] = assets::data_point{
-                .low = lows[i].get<double>(),
-                .high = highs[i].get<double>(),
-                .adjclose = closes[i].get<double>(),
+                .adjclose = closes[i],
                 .timestamp = timestamps[i].get<uint32_t>() / 86400 //Convert to Days
             };
         }
@@ -132,7 +130,6 @@ namespace data_fetcher {
         // Kraken uses its own pair naming, e.g. "XBTUSD", "ETHUSD"
         // coinId should be the Kraken pair string (e.g. "XBTUSD")
         // interval=1440 = daily candles (in minutes)
-        // since = unix timestamp of (now - days)
         long long since = std::chrono::duration_cast<std::chrono::seconds>(
             std::chrono::system_clock::now().time_since_epoch()).count()
             - static_cast<long long>(days) * 86400LL;
@@ -184,15 +181,11 @@ namespace data_fetcher {
         auto& candle = (*candles)[i];
         // [time, open, high, low, close, vwap, volume, count]
         // Kraken returns numbers as strings in OHLC!
-        double high  = std::stod(candle[2].get<std::string>());
-        double low   = std::stod(candle[3].get<std::string>());
         double close = std::stod(candle[4].get<std::string>());
 
         uint32_t ts = static_cast<uint32_t>(candle[0].get<long long>() / 86400LL);
 
         a.data_points[i] = assets::data_point{
-            .low      = low,
-            .high     = high,
             .adjclose = close,
             .timestamp = ts
         };
@@ -238,8 +231,6 @@ namespace data_fetcher {
                 auto [it, inserted] = fx_cache.try_emplace(asset.currency, fetch_fx_rate(asset.currency, target_currency));
                 if(it->second == -1) throw std::runtime_error("Failed to fetch exchange rate for currency conversion.");
                 for(size_t i = 0; i < asset.n_data_points; i++){
-                    asset.data_points[i].low *= it->second;
-                    asset.data_points[i].high *= it->second;
                     asset.data_points[i].adjclose *= it->second;
                 }
                 asset.currency = target_currency;

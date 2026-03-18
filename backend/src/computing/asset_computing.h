@@ -10,11 +10,19 @@
 
 namespace asset_compute {
 
+    void compute_log_return_for_asset(assets::asset& asset){
+        asset.data_points[0].log_return = 1.0; //First log return is set to 0 by convention
+        for(size_t i = 1; i < (size_t)asset.n_data_points; i++){
+           asset.data_points[i].log_return = std::log(asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose);
+        }
+    }
+
+    // ================ GENERAL ASSET ANALYSIS ================
+
     double avg_log_return(const assets::asset& asset){
         double sum_log_return = 0.0;
         for (size_t i = 1; i < asset.n_data_points; i++) {
-            double log_return = std::log(asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose);
-            sum_log_return += log_return;
+            sum_log_return += asset.data_points[i].log_return;
         }
         return sum_log_return / (asset.n_data_points - 1);
     }
@@ -25,12 +33,7 @@ namespace asset_compute {
         for (const auto& asset : assets) {
             for (size_t i = 1; i < static_cast<size_t>(asset.n_data_points); i++) {
                 if (asset.data_points[i].timestamp == timestamp) {
-                    double prev = asset.data_points[i - 1].adjclose;
-                    double curr = asset.data_points[i].adjclose;
-                    if (prev <= 0.0 || curr <= 0.0) continue;
-                    double lr = std::log(curr / prev);
-                    if (!std::isfinite(lr)) continue;
-                    cross_asset_returns.push_back(lr);
+                    cross_asset_returns.push_back(asset.data_points[i].log_return);
                     break;
                 }
             }
@@ -46,12 +49,7 @@ namespace asset_compute {
         for (const auto& asset : assets) {
             for (size_t i = 1; i < static_cast<size_t>(asset.n_data_points); i++) {
                 if (asset.data_points[i].timestamp == timestamp) {
-                    double prev = asset.data_points[i - 1].adjclose;
-                    double curr = asset.data_points[i].adjclose;
-                    if (prev <= 0.0 || curr <= 0.0) continue;
-                    double lr = std::log(curr / prev);
-                    if (!std::isfinite(lr)) continue;
-                    if (lr < 0.0) count++;
+                     if(asset.data_points[i].log_return < 0.0) count++;
                     break;
                 }
             }
@@ -59,35 +57,7 @@ namespace asset_compute {
         return count;
     }
 
-    std::vector<double> log_returns(const assets::asset& asset){
-        std::vector<double> log_returns;
-        log_returns.reserve(asset.n_data_points - 1);
-        for (size_t i = 1; i < asset.n_data_points; i++) {
-            double log_return = std::log(asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose);
-            log_returns.push_back(log_return);
-        }
-        return log_returns;
-    }
-
-    [[deprecated]] std::vector<std::pair<double,double>> log_return_aligned_assets(const assets::asset& asset1, const assets::asset& asset2) {
-        std::vector<std::pair<double,double>> aligned_returns_vec(asset1.n_data_points, {0.0, 0.0});
-        size_t j = 0;
-        size_t k = 0;
-        for (size_t i = 1; i < asset1.n_data_points; i++) {
-           while (j < asset2.n_data_points && asset2.data_points[j].timestamp < asset1.data_points[i].timestamp) {
-                j++;
-            }
-            if (j < asset2.n_data_points && asset2.data_points[j].timestamp == asset1.data_points[i].timestamp) {
-                if(j==0) continue;
-                aligned_returns_vec[k].first = std::log(asset1.data_points[i].adjclose / asset1.data_points[i - 1].adjclose);
-                aligned_returns_vec[k].second = std::log(asset2.data_points[j].adjclose / asset2.data_points[j - 1].adjclose);
-                k++;
-            }
-            
-        }
-        aligned_returns_vec.resize(k);
-        return aligned_returns_vec;
-    }
+    //=============== COVARIANCE MATRIX & RELATED ================
 
     int32_t count_assets_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
         int32_t counts = 0;
@@ -111,13 +81,8 @@ namespace asset_compute {
         for (const auto& asset : assets) {
             std::unordered_map<uint32_t, double> lr_map;
             for (int i = 1; i < asset.n_data_points; ++i) {
-                double prev = asset.data_points[i - 1].adjclose;
-                double curr = asset.data_points[i].adjclose;
-                if (prev <= 0.0 || curr <= 0.0) continue; // skip invalid/missing data
-                double lr = std::log(curr / prev);
-                if (!std::isfinite(lr)) continue; // skip NaN / inf
                 uint32_t ts = asset.data_points[i].timestamp;
-                lr_map[ts] = lr;
+                lr_map[ts] = asset.data_points[i].log_return;
             }
             asset_log_return_maps.push_back(std::move(lr_map));
         }
@@ -125,11 +90,9 @@ namespace asset_compute {
         std::unordered_set<uint32_t> common_timestamps;
         for (const auto& [ts, _] : asset_log_return_maps[0]) common_timestamps.insert(ts);
         for (size_t i = 1; i < asset_log_return_maps.size(); ++i) {
-            std::unordered_set<uint32_t> next;
             for (const auto& [ts, _] : asset_log_return_maps[i]) {
-                if (common_timestamps.count(ts)) next.insert(ts);
+                std::erase_if(common_timestamps, [&](uint32_t t){ return asset_log_return_maps[i].count(ts) == 0; });
             }
-            common_timestamps = std::move(next);
             if (common_timestamps.empty()) return {};
         }
 
@@ -150,26 +113,7 @@ namespace asset_compute {
         return result;
     }
 
-    [[deprecated]] std::vector<std::pair<double,double>> log_return_aligned_assets_for_timestamps(const assets::asset& asset1, const assets::asset& asset2, const std::unordered_set<uint32_t>& timestamps) {
-        std::vector<std::pair<double,double>> aligned_returns_vec(asset1.n_data_points, {0.0, 0.0});
-        size_t j = 0;
-        size_t k = 0;
-        for (size_t i = 1; i < asset1.n_data_points; i++) {
-           while (j < asset2.n_data_points && asset2.data_points[j].timestamp < asset1.data_points[i].timestamp) {
-                j++;
-            }
-            if (j < asset2.n_data_points && asset2.data_points[j].timestamp == asset1.data_points[i].timestamp) {
-                if(j==0) continue;
-                if(!timestamps.contains(asset1.data_points[i].timestamp)) continue;
-                aligned_returns_vec[k].first = std::log(asset1.data_points[i].adjclose / asset1.data_points[i - 1].adjclose);
-                aligned_returns_vec[k].second = std::log(asset2.data_points[j].adjclose / asset2.data_points[j - 1].adjclose);
-                k++;
-            }
-            
-        }
-        aligned_returns_vec.resize(k);
-        return aligned_returns_vec;
-    }
+   
 
 
     std::unordered_set<uint32_t> compute_stressed_timestamps(const std::vector<assets::asset>& assets, double med_log_return_threshold = 0.01, double min_negative_log_return_pct = 0.8){
@@ -251,11 +195,21 @@ namespace asset_compute {
         }
     }
 
+    Mat cholesky_decomp(const Mat& cov_mat){
+        Eigen::LLT<Mat> llt(cov_mat);
+        if(llt.info() == Eigen::NumericalIssue){
+            throw std::runtime_error("Covariance matrix is not positive definite");
+        }
+        return llt.matrixL();
+    }
+
+    // =============== OTHER ASSET METRICS ================
+
     double volatility(const assets::asset& asset){
         double avg_return = avg_log_return(asset);
         double volatility_sum = 0.0;
         for(size_t i = 1; i < (size_t)asset.n_data_points; i++){
-            double log_ret = std::log(asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose);
+            double log_ret = asset.data_points[i].log_return;
             volatility_sum += (log_ret - avg_return) * (log_ret - avg_return);
         }
         return std::sqrt(volatility_sum / (asset.n_data_points - 1));
@@ -276,11 +230,7 @@ namespace asset_compute {
         size_t n_returns = asset.n_data_points - 1;
 
         for (size_t i = 1; i < asset.n_data_points; ++i) {
-            double r = std::log(
-                asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose
-            );
-
-            double z = (r - mu) / sigma;
+            double z = (asset.data_points[i].log_return - mu) / sigma;
             sum += std::pow(z, 4);
         }
 
@@ -294,13 +244,7 @@ namespace asset_compute {
          //we return infinity which corresponds to a normal distribution
     }
 
-    Mat cholesky_decomp(const Mat& cov_mat){
-        Eigen::LLT<Mat> llt(cov_mat);
-        if(llt.info() == Eigen::NumericalIssue){
-            throw std::runtime_error("Covariance matrix is not positive definite");
-        }
-        return llt.matrixL();
-    }
+
 
     double max_drawdown(const assets::asset& asset){
         double max_drawdown = 0.0;
@@ -348,10 +292,52 @@ namespace asset_compute {
         double vol = volatility(asset);
         double sum = 0.0;
         for(size_t i = 1; i < asset.n_data_points; i++){
-            double log_ret = std::log(asset.data_points[i].adjclose / asset.data_points[i-1].adjclose);
-            sum += std::pow((log_ret - avg) / vol, 3.0);
+            sum += std::pow((asset.data_points[i].log_return - avg) / vol, 3.0);
         }
         return sum / (asset.n_data_points - 1);
+    }
+
+
+    //======== DEPRECATED ==============
+     [[deprecated]] std::vector<std::pair<double,double>> log_return_aligned_assets_for_timestamps(const assets::asset& asset1, const assets::asset& asset2, const std::unordered_set<uint32_t>& timestamps) {
+        std::vector<std::pair<double,double>> aligned_returns_vec(asset1.n_data_points, {0.0, 0.0});
+        size_t j = 0;
+        size_t k = 0;
+        for (size_t i = 1; i < asset1.n_data_points; i++) {
+           while (j < asset2.n_data_points && asset2.data_points[j].timestamp < asset1.data_points[i].timestamp) {
+                j++;
+            }
+            if (j < asset2.n_data_points && asset2.data_points[j].timestamp == asset1.data_points[i].timestamp) {
+                if(j==0) continue;
+                if(!timestamps.contains(asset1.data_points[i].timestamp)) continue;
+                aligned_returns_vec[k].first = std::log(asset1.data_points[i].adjclose / asset1.data_points[i - 1].adjclose);
+                aligned_returns_vec[k].second = std::log(asset2.data_points[j].adjclose / asset2.data_points[j - 1].adjclose);
+                k++;
+            }
+            
+        }
+        aligned_returns_vec.resize(k);
+        return aligned_returns_vec;
+    }
+
+      [[deprecated]] std::vector<std::pair<double,double>> log_return_aligned_assets(const assets::asset& asset1, const assets::asset& asset2) {
+        std::vector<std::pair<double,double>> aligned_returns_vec(asset1.n_data_points, {0.0, 0.0});
+        size_t j = 0;
+        size_t k = 0;
+        for (size_t i = 1; i < asset1.n_data_points; i++) {
+           while (j < asset2.n_data_points && asset2.data_points[j].timestamp < asset1.data_points[i].timestamp) {
+                j++;
+            }
+            if (j < asset2.n_data_points && asset2.data_points[j].timestamp == asset1.data_points[i].timestamp) {
+                if(j==0) continue;
+                aligned_returns_vec[k].first = std::log(asset1.data_points[i].adjclose / asset1.data_points[i - 1].adjclose);
+                aligned_returns_vec[k].second = std::log(asset2.data_points[j].adjclose / asset2.data_points[j - 1].adjclose);
+                k++;
+            }
+            
+        }
+        aligned_returns_vec.resize(k);
+        return aligned_returns_vec;
     }
 
 }

@@ -9,14 +9,9 @@
 namespace assets {
     
     struct data_point {
-        double low;
-        double high;
         double adjclose;
+        double log_return;
         uint32_t timestamp;
-    };
-
-    struct data_point_red{
-        double adj_close;
     };
 
 

@@ -12,7 +12,9 @@ int main() {
     std::vector<assets::asset> assets;
     std::string symbols[] = {"AAPL", "MSFT", "GOOGL"};
     for(auto& sym : symbols){
-        assets.push_back(data_fetcher::fetch_stock(sym));
+        assets::asset a = data_fetcher::fetch_stock(sym);
+        asset_compute::compute_log_return_for_asset(a);
+        assets.push_back(a);
     }
 
     auto m = asset_compute::compute_covariance_matrix(assets, false);
