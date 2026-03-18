@@ -11,6 +11,7 @@ import Histogram from '@/components/Histogram.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
 import { usePortfolioStore } from '@/stores/counter.js'
 import BackArrow from '@/components/BackArrow.vue'
+import TooltipComp from '@/components/TooltipComp.vue'
 
 ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
@@ -98,7 +99,10 @@ function openSettings(){
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs text-text-secondary mb-1">Horizon (days)</label>
+            <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+              Horizon (days)
+              <TooltipComp content="Number of trading days to simulate into the future." />
+            </label>
             <input
               v-model.number="horizon_days"
               type="number"
@@ -107,7 +111,10 @@ function openSettings(){
             />
           </div>
           <div>
-            <label class="block text-xs text-text-secondary mb-1">Simulations</label>
+            <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+              Simulations
+              <TooltipComp content="Number of simulation paths to generate. More paths yield more accurate results." />
+            </label>
             <input
               v-model.number="n_sims"
               type="number"
@@ -116,7 +123,10 @@ function openSettings(){
             />
           </div>
           <div >
-            <label class="block text-xs text-text-secondary mb-1">Drift Scenario</label>
+            <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+              Drift Scenario
+              <TooltipComp content="Controls the expected return assumption. Shrinkage reduces historical drift towards zero to avoid overfitting." />
+            </label>
             <select v-model="drift_scenario" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
               <option value="SHRINKAGE_25">Shrinkage 25%</option>
               <option value="ZERO">Zero</option>
@@ -125,7 +135,10 @@ function openSettings(){
               </select>
         </div>
         <div>
-          <label class="block text-xs text-text-secondary mb-1">Volatility Scenario</label>
+          <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+            Volatility Scenario
+            <TooltipComp content="Controls how volatility is estimated. EWMA weights recent observations more heavily; the percentage controls the blend with historical estimates." />
+          </label>
           <select v-model="volatility_scenario" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
             <option value="HISTORICAL">Historical</option>
             <option value="EMWA_100">EWMA 100%</option>
@@ -134,7 +147,10 @@ function openSettings(){
             </select>
         </div>
         <div>
-          <label class="block text-xs text-text-secondary mb-1">Volatility Scenario</label>
+          <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+            Multivariate-t Distribution
+            <TooltipComp content="When enabled, uses a multivariate-t distribution to better capture fat tails and extreme market events." />
+          </label>
           <select v-model="multivariate_t" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
             <option value="ENABLED">Enabled</option>
             <option value="DISABLED">Disabled</option>
