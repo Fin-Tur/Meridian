@@ -4,11 +4,20 @@
 #include <vector>
 #include <eigen3/Eigen/Dense>
 #include <unordered_set>
+#include <unordered_map>
 
 #define Mat Eigen::MatrixXd
 #define Vec Eigen::VectorXd
 
 namespace asset_compute {
+
+    struct precomputed_voc_mat_data {
+        std::unordered_map<uint32_t, size_t> neg_count_map;
+        std::unordered_map<uint32_t, size_t> total_count_map;
+        std::vector<std::unordered_map<uint32_t, double>> log_return_maps;
+        std::unordered_set<uint32_t> common_timestamps;
+        size_t n_assets;
+    };
 
     void compute_log_return_for_asset(assets::asset& asset){
         asset.data_points[0].log_return = 1.0; //First log return is set to 0 by convention
@@ -44,60 +53,73 @@ namespace asset_compute {
         return cross_asset_returns[mid];
     }
 
-    size_t count_negative_log_returns_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
-        size_t count = 0;
-        for (const auto& asset : assets) {
-            for (size_t i = 1; i < static_cast<size_t>(asset.n_data_points); i++) {
-                if (asset.data_points[i].timestamp == timestamp) {
-                     if(asset.data_points[i].log_return < 0.0) count++;
-                    break;
-                }
-            }
-        }
-        return count;
-    }
 
     //=============== COVARIANCE MATRIX & RELATED ================
 
-    int32_t count_assets_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
-        int32_t counts = 0;
-        for (const auto& asset : assets) {
-            for (size_t i = 1; i <asset.n_data_points; i++) {
-                if (asset.data_points[i].timestamp == timestamp) {
-                    counts++;
-                    break;
-                }
-            }
-        }
-        return counts;
-    }
-
-    std::vector<std::vector<double>> aligned_log_returns(const std::vector<assets::asset>& assets, const std::unordered_set<uint32_t>* const timestamps = nullptr){ 
-        std::vector<std::vector<double>> result;
-        if (assets.empty()) return result;
-        //map timestamp, logreturn
-        std::vector<std::unordered_map<uint32_t, double>> asset_log_return_maps;
-        asset_log_return_maps.reserve(assets.size());
+    void fill_cov_mat_precompute(precomputed_voc_mat_data& data, const std::vector<assets::asset>& assets){
         for (const auto& asset : assets) {
             std::unordered_map<uint32_t, double> lr_map;
             for (int i = 1; i < asset.n_data_points; ++i) {
                 uint32_t ts = asset.data_points[i].timestamp;
                 lr_map[ts] = asset.data_points[i].log_return;
+                data.total_count_map[ts]++;
+                if(asset.data_points[i].log_return < 0.0){
+                    data.neg_count_map[ts]++;
+                } else if(data.neg_count_map.contains(ts) == false){
+                    data.neg_count_map[ts] = 0;
+                }
             }
-            asset_log_return_maps.push_back(std::move(lr_map));
+            data.log_return_maps.push_back(std::move(lr_map));
         }
-        //extract timestamps in every asset
-        std::unordered_set<uint32_t> common_timestamps;
-        for (const auto& [ts, _] : asset_log_return_maps[0]) common_timestamps.insert(ts);
-        for (size_t i = 1; i < asset_log_return_maps.size(); ++i) {
-            for (const auto& [ts, _] : asset_log_return_maps[i]) {
-                std::erase_if(common_timestamps, [&](uint32_t t){ return asset_log_return_maps[i].count(ts) == 0; });
+        for (const auto& [ts, _] : data.log_return_maps[0]) data.common_timestamps.insert(ts);
+        for (size_t i = 1; i < data.log_return_maps.size(); ++i) {
+            for (const auto& [ts, _] : data.log_return_maps[i]) {
+                std::erase_if(data.common_timestamps, [&](uint32_t t){ return data.log_return_maps[i].count(ts) == 0; });
             }
-            if (common_timestamps.empty()) return {};
+            if (data.common_timestamps.empty()) return;
         }
+    }
+
+    
+
+    std::unordered_map<uint32_t, double> avg_log_return_timestamp_map(const precomputed_voc_mat_data& data){
+        std::unordered_map<uint32_t, std::pair<double, size_t>> ts_accum;
+        for (const auto& asset_lr_map : data.log_return_maps) {
+             for (const auto& [ts, lr] : asset_lr_map) {
+                ts_accum[ts].first  += lr;
+                ts_accum[ts].second += 1;
+            }
+        }
+        std::unordered_map<uint32_t, double> result;
+        result.reserve(ts_accum.size());
+        for (const auto& [ts, acc] : ts_accum) {
+            result[ts] = acc.first / static_cast<double>(acc.second);
+        }
+        return result;
+    }
+
+    std::unordered_map<uint32_t, double> rolling_20d_equal_weighted_avg_log_return(const precomputed_voc_mat_data& data){
+        std::unordered_map<uint32_t, double> ts_returns = avg_log_return_timestamp_map(data);
+        std::vector<uint32_t> timestamps(ts_returns.size());
+        std::transform(ts_returns.begin(), ts_returns.end(), timestamps.begin(), [](const auto& pair){ return pair.first; });
+        std::sort(timestamps.begin(), timestamps.end());
+        std::unordered_map<uint32_t, double> result;
+        
+        for(size_t i = 20; i < timestamps.size(); i++){
+            double sum = 0.0;
+            for(size_t j = i - 20; j < i; j++){
+                sum += ts_returns[timestamps[j]];
+            }
+            result[timestamps[i]] = sum / 20.0;
+        }
+        return result;
+    }
+
+    std::vector<std::vector<double>> aligned_log_returns(const precomputed_voc_mat_data& data, const std::unordered_set<uint32_t>* const timestamps = nullptr){ 
+        std::vector<std::vector<double>> result;
 
         std::unordered_set<uint32_t> matching_timestamps;
-        for(const auto& ts : common_timestamps){
+        for(const auto& ts : data.common_timestamps){
             if(timestamps && !timestamps->contains(ts)) continue;
             matching_timestamps.insert(ts);
         }
@@ -105,7 +127,7 @@ namespace asset_compute {
 
         for (uint32_t ts : matching_timestamps) {
             std::vector<double> day_returns;
-            for (const auto& lr_map : asset_log_return_maps) {
+            for (const auto& lr_map : data.log_return_maps) {
                 day_returns.push_back(lr_map.at(ts));
             }
             result.push_back(std::move(day_returns));
@@ -113,49 +135,56 @@ namespace asset_compute {
         return result;
     }
 
-   
+    double get_bottom_x_percentile(std::vector<double>& data, double x){
+        if(data.empty()) return 0.0;
+        size_t idx = static_cast<size_t>(std::floor(x * data.size()));
+        std::nth_element(data.begin(), data.begin() + idx, data.end());
+        return data[idx];
+    }
 
+   // 20d_avg_return <= 10% quantil
+   // > 70% of assets have negative return
+    std::unordered_set<uint32_t> compute_stressed_timestamps(const precomputed_voc_mat_data& data, double btm_percentile_treshhold = 0.1, double min_negative_log_return_pct = 0.7){
 
-    std::unordered_set<uint32_t> compute_stressed_timestamps(const std::vector<assets::asset>& assets, double med_log_return_threshold = 0.01, double min_negative_log_return_pct = 0.8){
+        std::unordered_map<uint32_t, double> rolling_log_r_avg = rolling_20d_equal_weighted_avg_log_return(data);
+        std::vector<double> avg_returns(rolling_log_r_avg.size());
+        std::transform(rolling_log_r_avg.begin(), rolling_log_r_avg.end(), avg_returns.begin(), [](const auto& pair){ return pair.second; });
+        double btm_10th_percentile = get_bottom_x_percentile(avg_returns, btm_percentile_treshhold);
+
         std::unordered_set<uint32_t> stressed_timestamps;
-        if (assets.empty()) return stressed_timestamps;
-        uint32_t earliest = UINT32_MAX;
-        uint32_t latest   = 0;
-        for (const auto& asset : assets) {
-            for (size_t i = 0; i < static_cast<size_t>(asset.n_data_points); i++) {
-                uint32_t ts = asset.data_points[i].timestamp;
-                if (ts < earliest) earliest = ts;
-                if (ts > latest)   latest   = ts;
-            }
-        }
-        if (earliest == UINT32_MAX || latest < earliest) return stressed_timestamps;
 
-        for (uint32_t ts = earliest; ts <= latest; ts ++ ) {
-            double med_lr = med_log_return_for_timestamp(assets, ts);
-            if (med_lr <= -med_log_return_threshold) {
-                size_t count_neg = count_negative_log_returns_for_timestamp(assets, ts);
-                size_t count_total = count_assets_for_timestamp(assets, ts);
-                double neg_pct = static_cast<double>(count_neg) / count_total;
-                if (neg_pct >= min_negative_log_return_pct && count_total / static_cast<double>(assets.size()) > 0.6) {
+        for (const auto& [ts, avg] : rolling_log_r_avg) {
+            if (avg <= btm_10th_percentile) {
+                double neg_pct = static_cast<double>(data.neg_count_map.at(ts)) / data.total_count_map.at(ts);
+                if (neg_pct >= min_negative_log_return_pct && data.total_count_map.at(ts) / data.n_assets > min_negative_log_return_pct) {
                     stressed_timestamps.insert(ts);
                 }
             }
         }
+        std::cout << "Identified " << stressed_timestamps.size() << " stressed timestamps out of " << rolling_log_r_avg.size() << " total timestamps." << std::endl;
         return stressed_timestamps;
     }
-
+    /*
+        ENTRY POINT FOR COVARIANCE MATRIX CALCULATION
+        If stressed is false, we compute the covariance matrix using all common timestamps
+        TODO : Both in one
+    */
     Mat compute_covariance_matrix(const std::vector<assets::asset>& assets, bool stressed = false){
         size_t n_assets = assets.size();
         Mat cov_matrix(n_assets, n_assets);
 
+        precomputed_voc_mat_data precompute_data;
+        precompute_data.n_assets = n_assets;
+        fill_cov_mat_precompute(precompute_data, assets);
+
         std::unordered_set<uint32_t> stressed_timestamps;
         if (stressed) {
-            stressed_timestamps = compute_stressed_timestamps(assets);
+            stressed_timestamps = compute_stressed_timestamps(precompute_data);
         }
 
         auto daily_returns = stressed
-            ? aligned_log_returns(assets, &stressed_timestamps)
-            : aligned_log_returns(assets);
+            ? aligned_log_returns(precompute_data, &stressed_timestamps)
+            : aligned_log_returns(precompute_data);
 
         if (daily_returns.size() < 2) {
             cov_matrix.setZero();
@@ -338,6 +367,32 @@ namespace asset_compute {
         }
         aligned_returns_vec.resize(k);
         return aligned_returns_vec;
+    }
+
+    [[deprecated]] int32_t count_assets_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
+        int32_t counts = 0;
+        for (const auto& asset : assets) {
+            for (size_t i = 1; i <asset.n_data_points; i++) {
+                if (asset.data_points[i].timestamp == timestamp) {
+                    counts++;
+                    break;
+                }
+            }
+        }
+        return counts;
+    }
+
+    [[deprecated]] size_t count_negative_log_returns_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
+        size_t count = 0;
+        for (const auto& asset : assets) {
+            for (size_t i = 1; i < static_cast<size_t>(asset.n_data_points); i++) {
+                if (asset.data_points[i].timestamp == timestamp) {
+                     if(asset.data_points[i].log_return < 0.0) count++;
+                    break;
+                }
+            }
+        }
+        return count;
     }
 
 }
