@@ -22,11 +22,12 @@ const n_sims = ref(1000)
 const horizon_days = ref(30)
 const drift_scenario = ref('SHRINKAGE_25')
 const volatility_scenario = ref('EMWA_75')
+const multivariate_t = ref("ENABLED")
 const display_unit = ref('$')
 
 async function start_simulation(){
   loading.value = true
-  simulation.value = await fetch_simulation(n_sims.value, horizon_days.value, drift_scenario.value, volatility_scenario.value)
+  simulation.value = await fetch_simulation(n_sims.value, horizon_days.value, drift_scenario.value, volatility_scenario.value, multivariate_t.value)
   loading.value = false
 }
 
@@ -130,6 +131,13 @@ function openSettings(){
             <option value="EMWA_100">EWMA 100%</option>
             <option value="EMWA_75">EWMA 75%</option>
             <option value="EMWA_50">EWMA 50%</option>
+            </select>
+        </div>
+        <div>
+          <label class="block text-xs text-text-secondary mb-1">Volatility Scenario</label>
+          <select v-model="multivariate_t" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
+            <option value="ENABLED">Enabled</option>
+            <option value="DISABLED">Disabled</option>
             </select>
         </div>
         </div>

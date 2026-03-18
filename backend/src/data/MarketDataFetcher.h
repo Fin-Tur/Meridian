@@ -37,12 +37,20 @@ namespace data_fetcher {
 
         auto j   = nlohmann::json::parse(res->body);
 
-        auto& quote  = j["chart"]["result"][0]["indicators"]["quote"][0];
-        auto& closesRaw = j["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"];
+        auto& closesRaw  = j["chart"]["result"][0]["indicators"]["adjclose"][0]["adjclose"];
         auto& timestamps = j["chart"]["result"][0]["timestamp"];
 
-        auto closes = closesRaw.get<std::vector<double>>();
-        closes.erase(std::remove_if(closes.begin(), closes.end(), [](double v){ return std::isnan(v) || v <= 0.0; }), closes.end());
+        std::vector<double>   closes;
+        std::vector<uint32_t> valid_timestamps;
+        closes.reserve(closesRaw.size());
+        valid_timestamps.reserve(timestamps.size());
+        for (size_t i = 0; i < closesRaw.size(); i++) {
+            if (closesRaw[i].is_null() || timestamps[i].is_null()) continue;
+            double v = closesRaw[i].get<double>();
+            if (std::isnan(v) || v <= 0.0) continue;
+            closes.push_back(v);
+            valid_timestamps.push_back(timestamps[i].get<uint32_t>() / 86400); //Convert to Days
+        }
 
         assets::asset a;
         a.symbol = symbol;
@@ -53,7 +61,7 @@ namespace data_fetcher {
         for (size_t i = 0; i < closes.size(); i++) {
             a.data_points[i] = assets::data_point{
                 .adjclose = closes[i],
-                .timestamp = timestamps[i].get<uint32_t>() / 86400 //Convert to Days
+                .timestamp = valid_timestamps[i]
             };
         }
         stock_cache[symbol] = {a, day};

@@ -74,7 +74,7 @@ class server {
                 } else {
                     fetched = data_fetcher::fetch_stock(ticker);
                 }
-
+                asset_compute::compute_log_return_for_asset(fetched);
                 fetched_assets.push_back(fetched);
                 weights.push_back(weight);
             }
@@ -84,7 +84,6 @@ class server {
             monte_carlo::sim_config config = {
                 .vol_model = vol_model,
                 .drift_scenario = drift_scenario,
-                .boost_correlations = body.value("boost_correlations", 1.0),
                 .multivariate_t = body.value("multivariate_t", false)
             };
             auto preset = monte_carlo::generate_sim_preset(fetched_assets, weights, n_sims, horizon_days,  config, portfolio_value);
@@ -141,7 +140,7 @@ class server {
                     } else {
                         fetched = data_fetcher::fetch_stock(ticker);
                     }
-
+                    asset_compute::compute_log_return_for_asset(fetched);
                     fetched_assets.push_back(fetched);
                 }
 
@@ -179,6 +178,7 @@ class server {
                 if(fetched.n_data_points == 0){
                     throw std::runtime_error("Failed to fetch market data for: " + ticker);
                 }
+                asset_compute::compute_log_return_for_asset(fetched);
                 std::vector<double> adj_closes;
                 adj_closes.reserve(fetched.n_data_points);
                 for (int i = 0; i < fetched.n_data_points; i++)
@@ -236,7 +236,7 @@ class server {
                     if (fetched.n_data_points == 0) {
                         throw std::runtime_error("Failed to fetch market data for: " + ticker);
                     }
-
+                    asset_compute::compute_log_return_for_asset(fetched);
                     fetched_assets.push_back(fetched);
                     amounts.push_back(amount);
                 }

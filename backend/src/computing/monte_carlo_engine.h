@@ -43,7 +43,6 @@ namespace monte_carlo {
     struct sim_config {
         volatility_model vol_model;
         drift_scenario drift_scenario;
-        double boost_correlations = 1.0;
         bool multivariate_t;
         //regimes 
     };
@@ -52,11 +51,12 @@ namespace monte_carlo {
         double portfolio_value;
 
         size_t n_assets;
-        std::vector<double> sigma;
-        std::vector<double> mu;
-        std::vector<double> df;
-        std::vector<double> sigma_ewma;
-        Vec weight;
+        std::vector<double> sigma; //volatility for each asset
+        std::vector<double> mu; //average log return for each asset
+        std::vector<double> df; //portfolio tail -> higher dof = less tails
+        double avg_df;
+        std::vector<double> sigma_ewma; //volatility depending on previos log returns
+        Vec weight; 
 
         Mat cholesky_cov_mat;
         size_t n_sims;
@@ -114,18 +114,8 @@ namespace monte_carlo {
             preset.df.back() = preset.df[i] + (30.0 - preset.df[i]) * std::min(1.0, horizon_days / 63.0);
             
         }
+        preset.avg_df = std::accumulate(preset.df.begin(), preset.df.end(), 0.0) / preset.df.size();
         Mat cov_matrix = asset_compute::compute_covariance_matrix(assets);
-        
-        if(config.boost_correlations != 1){
-            for(size_t i = 0; i < preset.n_assets; i++){
-                for(size_t j = 0; j < preset.n_assets; j++){
-                    if(i != j){
-                        cov_matrix(i,j) = cov_matrix(i,j) * config.boost_correlations + (1 - config.boost_correlations);
-                    }
-                }
-            }
-        }
-        
         asset_compute::normalize_covariance_matrix(cov_matrix);
         preset.cholesky_cov_mat = asset_compute::cholesky_decomp(cov_matrix);
         return preset;
@@ -133,10 +123,12 @@ namespace monte_carlo {
 
     void simulation_job(const sim_preset& preset, const sim_config& config, unsigned int id, int32_t load_size, double* res_out){
         std::vector<std::student_t_distribution<double>> dists;
+        std::chi_squared_distribution<double> chi2(preset.avg_df);
+        std::normal_distribution<double> norm(0.0, 1.0);
         dists.reserve(preset.n_assets);
         std::vector<double> drifts(preset.n_assets);
         for (size_t k = 0; k < preset.n_assets; ++k) {
-            dists.emplace_back(preset.df[k]);
+            if(!config.multivariate_t)dists.emplace_back(preset.df[k]);
             switch (config.vol_model) {
                 case volatility_model::HISTORICAL:
                     drifts[k] = preset.mu[k] - 0.5 * preset.sigma[k] * preset.sigma[k];
@@ -168,17 +160,31 @@ namespace monte_carlo {
             }
         }
         Vec S(preset.n_assets);
-        Vec Z(preset.n_assets);
+        Vec Shocks(preset.n_assets);
         Vec Eps(preset.n_assets);
+        // == Declarations to avoid overhead in the loop ==
+            double chi2_sample;
+            double scale_multivariate_t;
+            double student_t_sample;
+            double scale;
+        // ===
         for(size_t i = 0; i < load_size && id * load_size + i < preset.n_sims; ++i){
             S.setOnes();
             for(size_t d = 0; d < preset.horizon_days; ++d){
-                for(size_t k = 0; k < preset.n_assets; ++k){
-                    double t = dists[k](rng);
-                    double scale = std::sqrt((preset.df[k] - 2) / preset.df[k]);
-                    Z(k) = t * scale;
+                if(config.multivariate_t){
+                    chi2_sample = chi2(rng);
+                    scale_multivariate_t = std::sqrt(preset.avg_df / chi2_sample);
                 }
-                Eps.noalias() = preset.cholesky_cov_mat * Z;
+                for(size_t k = 0; k < preset.n_assets; ++k){
+                    if(config.multivariate_t){
+                        Shocks(k) = norm(rng) / scale_multivariate_t;
+                    } else {
+                        student_t_sample = dists[k](rng);
+                        scale = std::sqrt((preset.df[k] - 2) / preset.df[k]);
+                        Shocks(k) = student_t_sample * scale;
+                    }
+                }
+                Eps.noalias() = preset.cholesky_cov_mat * Shocks;
                 for(size_t j = 0; j < preset.n_assets; ++j){
                     switch(config.vol_model) {
                         case volatility_model::HISTORICAL:
