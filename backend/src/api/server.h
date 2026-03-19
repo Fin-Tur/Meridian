@@ -84,7 +84,8 @@ class server {
             monte_carlo::sim_config config = {
                 .vol_model = vol_model,
                 .drift_scenario = drift_scenario,
-                .multivariate_t = body.value("multivariate_t", false)
+                .multivariate_t = body.value("multivariate_t", false),
+                .regimes = body.value("regimes", false)
             };
             auto preset = monte_carlo::generate_sim_preset(fetched_assets, weights, n_sims, horizon_days,  config, portfolio_value);
             auto result = monte_carlo::run_simulation(preset, config);

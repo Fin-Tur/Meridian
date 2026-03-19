@@ -40,11 +40,51 @@ namespace monte_carlo {
         EWMA_50,
     };
 
+    enum class regimes {
+        CALM, //Normal Correlation, Low Volatility
+        ENERGIC, //High Correlation, Medium Volatility
+        CRISIS, //Extreme Correlation, High Volatility
+
+    };
+
+    inline regimes change_regime(regimes regime, double x){
+        switch(regime){
+            case regimes::CALM:
+                if(x < 0.002) return regimes::CRISIS;
+                if(x < 0.03) return regimes::ENERGIC;
+                return regimes::CALM;
+                break;
+            case regimes::ENERGIC:
+                if(x < 0.05) return regimes::CRISIS;
+                if(x < 0.2) return regimes::CALM;
+                return regimes::ENERGIC;
+                break;
+            case regimes::CRISIS:
+                if(x < 0.25) return regimes::CALM;
+                if(x < 0.55) return regimes::CRISIS;
+                return regimes::ENERGIC;
+                break;
+        }
+        return regimes::CALM;
+    }
+
+    static std::unordered_map<regimes, double> regime_vol_multiplier = {
+        {regimes::CALM, 0.8},
+        {regimes::ENERGIC, 1.4},
+        {regimes::CRISIS, 2.5}
+    };
+
+    static std::unordered_map<regimes, double> regimes_df_multiplier = {
+        {regimes::CALM, 1.5},
+        {regimes::ENERGIC, 1.0},
+        {regimes::CRISIS, 0.5}
+    };
+
     struct sim_config {
         volatility_model vol_model;
         drift_scenario drift_scenario;
         bool multivariate_t;
-        //regimes 
+        bool regimes; 
     };
 
     struct sim_preset {
@@ -58,7 +98,8 @@ namespace monte_carlo {
         std::vector<double> sigma_ewma; //volatility depending on previos log returns
         Vec weight; 
 
-        Mat cholesky_cov_mat;
+        std::unordered_map<regimes, Mat> cholesky_cov_mats;
+
         size_t n_sims;
         size_t horizon_days;
     };
@@ -109,26 +150,38 @@ namespace monte_carlo {
             
             preset.mu.push_back(asset_compute::avg_log_return(assets[i])); 
             preset.df.push_back(std::max(asset_compute::dof_excess_kurtosis(assets[i]), 5.0));
-            //preset.df.back() = std::min(5.0, 30.0);
-            //Avoid extremely low dof which can cause instability in the t-distribution. Fat Tails only importanr for low horizons
             preset.df.back() = preset.df[i] + (30.0 - preset.df[i]) * std::min(1.0, horizon_days / 63.0);
             
         }
-        preset.avg_df = std::accumulate(preset.df.begin(), preset.df.end(), 0.0) / preset.df.size();
-        Mat cov_matrix = asset_compute::compute_covariance_matrix(assets);
+        double avg_df = 0.0;
+        for(const auto& df : preset.df){
+            avg_df += df*weights[&df - &preset.df[0]];
+        }
+
+        preset.avg_df = avg_df/assets.size();
+        auto [cov_matrix, cov_matrix_stressed] = asset_compute::compute_cov_matricies(assets);
         asset_compute::normalize_covariance_matrix(cov_matrix);
-        preset.cholesky_cov_mat = asset_compute::cholesky_decomp(cov_matrix);
+        asset_compute::normalize_covariance_matrix(cov_matrix_stressed);
+        //For energetic regime we can use a blend of the two covariance matrices, for example 60% calm + 40% stressed
+        Mat blended_cov = 0.6 * cov_matrix + 0.4 * cov_matrix_stressed;
+        preset.cholesky_cov_mats[regimes::ENERGIC] = asset_compute::cholesky_decomp(blended_cov);
+        preset.cholesky_cov_mats[regimes::CALM] = asset_compute::cholesky_decomp(cov_matrix);
+        preset.cholesky_cov_mats[regimes::CRISIS] = asset_compute::cholesky_decomp(cov_matrix_stressed);
+
         return preset;
     }
 
     void simulation_job(const sim_preset& preset, const sim_config& config, unsigned int id, int32_t load_size, double* res_out){
-        std::vector<std::student_t_distribution<double>> dists;
-        std::chi_squared_distribution<double> chi2(preset.avg_df);
+        std::vector<std::student_t_distribution<double>> student_t_dists;
+        std::chi_squared_distribution<double> chi2_calm(preset.avg_df * 1.5);
+        std::chi_squared_distribution<double> chi2_energic(preset.avg_df * 1.0);
+        std::chi_squared_distribution<double> chi2_crisis(preset.avg_df * 0.5);
         std::normal_distribution<double> norm(0.0, 1.0);
-        dists.reserve(preset.n_assets);
+        std::uniform_real_distribution<double> uniform_dist(0.0, 1.0);
+        student_t_dists.reserve(preset.n_assets);
         std::vector<double> drifts(preset.n_assets);
         for (size_t k = 0; k < preset.n_assets; ++k) {
-            if(!config.multivariate_t)dists.emplace_back(preset.df[k]);
+            if(!config.multivariate_t)student_t_dists.emplace_back(preset.df[k]);
             switch (config.vol_model) {
                 case volatility_model::HISTORICAL:
                     drifts[k] = preset.mu[k] - 0.5 * preset.sigma[k] * preset.sigma[k];
@@ -169,35 +222,54 @@ namespace monte_carlo {
             double scale;
         // ===
         for(size_t i = 0; i < load_size && id * load_size + i < preset.n_sims; ++i){
+            regimes current_regime = regimes::CALM;
             S.setOnes();
             for(size_t d = 0; d < preset.horizon_days; ++d){
+                if(config.regimes) current_regime = change_regime(current_regime, uniform_dist(rng));
                 if(config.multivariate_t){
-                    chi2_sample = chi2(rng);
-                    scale_multivariate_t = std::sqrt(preset.avg_df / chi2_sample);
+                    double eff_df = preset.avg_df * regimes_df_multiplier.at(current_regime);
+                    switch(current_regime){
+                        case regimes::CALM:    chi2_sample = chi2_calm(rng);    break;
+                        case regimes::ENERGIC: chi2_sample = chi2_energic(rng); break;
+                        case regimes::CRISIS:  chi2_sample = chi2_crisis(rng);  break;
+                    }
+                    scale_multivariate_t = std::sqrt(eff_df / chi2_sample);
                 }
                 for(size_t k = 0; k < preset.n_assets; ++k){
                     if(config.multivariate_t){
                         Shocks(k) = norm(rng) / scale_multivariate_t;
                     } else {
-                        student_t_sample = dists[k](rng);
-                        scale = std::sqrt((preset.df[k] - 2) / preset.df[k]);
+                        student_t_sample = student_t_dists[k](rng);
+                        scale = std::sqrt((preset.df[k]*regimes_df_multiplier.at(current_regime) - 2) / (preset.df[k]*regime_vol_multiplier.at(current_regime)));
                         Shocks(k) = student_t_sample * scale;
                     }
                 }
-                Eps.noalias() = preset.cholesky_cov_mat * Shocks;
+
+                switch(current_regime){
+                    case regimes::CALM:
+                        Eps.noalias() = (preset.cholesky_cov_mats.at(regimes::CALM)) * Shocks;
+                        break;
+                    case regimes::ENERGIC:
+                        Eps.noalias() = (preset.cholesky_cov_mats.at(regimes::ENERGIC)) * Shocks;
+                        break;
+                    case regimes::CRISIS:
+                        Eps.noalias() = (preset.cholesky_cov_mats.at(regimes::CRISIS)) * Shocks;
+                        break;
+                }
+
                 for(size_t j = 0; j < preset.n_assets; ++j){
                     switch(config.vol_model) {
                         case volatility_model::HISTORICAL:
-                            S(j) *= std::exp(drifts[j] + preset.sigma[j] * Eps(j));
+                            S(j) *= std::exp(drifts[j] + preset.sigma[j] * regime_vol_multiplier.at(current_regime) * Eps(j));
                             break;
                         case volatility_model::EWMA_100:
-                            S(j) *= std::exp(drifts[j] + preset.sigma_ewma[j] * Eps(j));
+                            S(j) *= std::exp(drifts[j] + preset.sigma_ewma[j] * regime_vol_multiplier.at(current_regime) * Eps(j));
                             break;
                         case volatility_model::EWMA_75:
-                            S(j) *= std::exp(drifts[j] + preset.sigma_ewma[j] * 0.75 + (1 - 0.75) * preset.sigma[j] * preset.sigma[j]) * Eps(j);
+                            S(j) *= std::exp(drifts[j] + (preset.sigma_ewma[j] * 0.75 + (1 - 0.75) * preset.sigma[j]) * regime_vol_multiplier.at(current_regime) * Eps(j));
                             break;
                         case volatility_model::EWMA_50:
-                            S(j) *= std::exp(drifts[j] + preset.sigma_ewma[j] * 0.5 + (1 - 0.5) * preset.sigma[j] * preset.sigma[j]) * Eps(j);
+                            S(j) *= std::exp(drifts[j] + (preset.sigma_ewma[j] * 0.5 + (1 - 0.5) * preset.sigma[j]) * regime_vol_multiplier.at(current_regime) * Eps(j));
                             break;
                     }
                 }

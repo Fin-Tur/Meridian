@@ -24,11 +24,12 @@ const horizon_days = ref(30)
 const drift_scenario = ref('SHRINKAGE_25')
 const volatility_scenario = ref('EMWA_75')
 const multivariate_t = ref("ENABLED")
+const regimes = ref('ENABLED')
 const display_unit = ref('$')
 
 async function start_simulation(){
   loading.value = true
-  simulation.value = await fetch_simulation(n_sims.value, horizon_days.value, drift_scenario.value, volatility_scenario.value, multivariate_t.value)
+  simulation.value = await fetch_simulation(n_sims.value, horizon_days.value, drift_scenario.value, volatility_scenario.value, multivariate_t.value, regimes.value)
   loading.value = false
 }
 
@@ -152,6 +153,16 @@ function openSettings(){
             <TooltipComp content="When enabled, uses a multivariate-t distribution to better capture fat tails and extreme market events." />
           </label>
           <select v-model="multivariate_t" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
+            <option value="ENABLED">Enabled</option>
+            <option value="DISABLED">Disabled</option>
+            </select>
+        </div>
+        <div>
+          <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+            Regimes
+            <TooltipComp content="When enabled, uses different market regimes to better capture varying market conditions." />
+          </label>
+          <select v-model="regimes" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
             <option value="ENABLED">Enabled</option>
             <option value="DISABLED">Disabled</option>
             </select>

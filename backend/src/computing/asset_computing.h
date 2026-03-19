@@ -167,7 +167,6 @@ namespace asset_compute {
     /*
         ENTRY POINT FOR COVARIANCE MATRIX CALCULATION
         If stressed is false, we compute the covariance matrix using all common timestamps
-        TODO : Both in one
     */
     Mat compute_covariance_matrix(const std::vector<assets::asset>& assets, bool stressed = false){
         size_t n_assets = assets.size();
@@ -210,6 +209,53 @@ namespace asset_compute {
             }
         }
         return cov_matrix;
+    }
+
+    std::pair<Mat, Mat> compute_cov_matricies(const std::vector<assets::asset>& assets){
+        size_t n_assets = assets.size();
+
+        precomputed_voc_mat_data precompute_data;
+        precompute_data.n_assets = n_assets;
+        fill_cov_mat_precompute(precompute_data, assets);
+
+        std::unordered_set<uint32_t> stressed_timestamps = compute_stressed_timestamps(precompute_data);
+
+        std::vector<uint32_t> sorted_ts(precompute_data.common_timestamps.begin(), precompute_data.common_timestamps.end());
+        std::sort(sorted_ts.begin(), sorted_ts.end());
+        const size_t T = sorted_ts.size();
+
+        std::vector<Eigen::Index> stressed_rows;
+        stressed_rows.reserve(stressed_timestamps.size());
+        for (size_t t = 0; t < T; ++t) {
+            if (stressed_timestamps.count(sorted_ts[t]))
+                stressed_rows.push_back(static_cast<Eigen::Index>(t));
+        }
+
+        if (T < 2 || stressed_rows.size() < 2) {
+            Mat zero = Mat::Zero(n_assets, n_assets);
+            return {zero, zero};
+        }
+
+        Mat Return_Mat(T, n_assets);
+        for (size_t t = 0; t < T; ++t)
+            for (size_t k = 0; k < n_assets; ++k)
+                Return_Mat(t, static_cast<Eigen::Index>(k)) = precompute_data.log_return_maps[k].at(sorted_ts[t]);
+
+        // Normal covariance via Eigen BLAS matrix multiply
+        Vec mean = Return_Mat.colwise().mean();
+        Mat Return_sub_mean = Return_Mat.rowwise() - mean.transpose();
+        Mat cov_matrix = (Return_sub_mean.transpose() * Return_sub_mean) / static_cast<double>(T - 1);
+
+        const size_t T_s = stressed_rows.size();
+        Mat Return_sub_mean_stressed(T_s, n_assets);
+        for (size_t si = 0; si < T_s; ++si)
+            Return_sub_mean_stressed.row(static_cast<Eigen::Index>(si)) = Return_Mat.row(stressed_rows[si]);
+
+        Vec mean_s = Return_sub_mean_stressed.colwise().mean();
+        Mat X_s_c = Return_sub_mean_stressed.rowwise() - mean_s.transpose();
+        Mat cov_matrix_stressed = (X_s_c.transpose() * X_s_c) / static_cast<double>(T_s - 1);
+
+        return {cov_matrix, cov_matrix_stressed};
     }
 
     void normalize_covariance_matrix(Mat& cov_matrix){
