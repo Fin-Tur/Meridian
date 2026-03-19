@@ -4,7 +4,6 @@
 #include <algorithm>
 
 #include "currency.h"
-#include "../data/MarketDataFetcher.h"
 
 namespace assets {
     

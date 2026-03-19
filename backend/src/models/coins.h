@@ -49,11 +49,11 @@ namespace coin {
         {"ETC",  "ETCUSD"}
     };
 
-    bool is_crypto(const std::string& ticker) {
+    inline bool is_crypto(const std::string& ticker) {
         return ticker_to_id.find(ticker) != ticker_to_id.end();
     }
 
-    std::string to_coin_id(const std::string& ticker) {
+    inline std::string to_coin_id(const std::string& ticker) {
         auto it = ticker_to_id.find(ticker);
         if (it != ticker_to_id.end()) {
             return it->second;

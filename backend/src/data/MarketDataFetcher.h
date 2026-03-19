@@ -15,7 +15,7 @@ namespace data_fetcher {
     inline std::unordered_map<std::string, std::pair<assets::asset, size_t>> stock_cache;
     inline std::unordered_map<std::string, std::pair<double, size_t>> fx_cache;
 
-    assets::asset fetch_stock(std::string& symbol, std::string range = "10y") {
+    inline assets::asset fetch_stock(std::string& symbol, std::string range = "10y") {
         size_t day = std::chrono::duration_cast<std::chrono::hours>(std::chrono::system_clock::now().time_since_epoch()).count()/24;
         if(stock_cache.contains(symbol)){
             auto& [cached_asset, last_fetched_day] = stock_cache[symbol];
@@ -121,7 +121,7 @@ namespace data_fetcher {
     }*/
 
     //Kraken Coin API for History up to 720 Days
-    assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 1440) {
+    inline assets::asset fetch_crypto(std::string& coinId, std::string& symbol, uint16_t days = 1440) {
         size_t day = std::chrono::duration_cast<std::chrono::hours>(
             std::chrono::system_clock::now().time_since_epoch()).count() / 24;
 
@@ -203,7 +203,7 @@ namespace data_fetcher {
     return a;
 }
 
-    double fetch_fx_rate(const currency& from_currency, currency to_currency = currency::USD) {
+    inline double fetch_fx_rate(const currency& from_currency, currency to_currency = currency::USD) {
         
         if(from_currency == to_currency) return 1.0;
         std::string pair = convert_curr_tostr(from_currency) + convert_curr_tostr(to_currency);
@@ -232,7 +232,7 @@ namespace data_fetcher {
         return rate;
     }
 
-    void unify_asset_currencies(std::vector<assets::asset>& asset_list, currency target_currency){
+    inline void unify_asset_currencies(std::vector<assets::asset>& asset_list, currency target_currency){
         std::map<currency, double> fx_cache; // Cache for exchange rates to avoid redundant API calls
         for(auto& asset : asset_list){
             if(asset.currency != target_currency){

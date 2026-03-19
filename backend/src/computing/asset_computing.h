@@ -1,6 +1,8 @@
 #pragma once
 #include "../models/assets.h"
 #include <cmath>
+#include <ctime>
+#include <iostream>
 #include <vector>
 #include <eigen3/Eigen/Dense>
 #include <unordered_set>
@@ -19,7 +21,7 @@ namespace asset_compute {
         size_t n_assets;
     };
 
-    void compute_log_return_for_asset(assets::asset& asset){
+    inline void compute_log_return_for_asset(assets::asset& asset){
         asset.data_points[0].log_return = 1.0; //First log return is set to 0 by convention
         for(size_t i = 1; i < (size_t)asset.n_data_points; i++){
            asset.data_points[i].log_return = std::log(asset.data_points[i].adjclose / asset.data_points[i - 1].adjclose);
@@ -28,7 +30,7 @@ namespace asset_compute {
 
     // ================ GENERAL ASSET ANALYSIS ================
 
-    double avg_log_return(const assets::asset& asset){
+    inline double avg_log_return(const assets::asset& asset){
         double sum_log_return = 0.0;
         for (size_t i = 1; i < asset.n_data_points; i++) {
             sum_log_return += asset.data_points[i].log_return;
@@ -36,7 +38,7 @@ namespace asset_compute {
         return sum_log_return / (asset.n_data_points - 1);
     }
 
-    double med_log_return_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
+    inline double med_log_return_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
         std::vector<double> cross_asset_returns;
         cross_asset_returns.reserve(assets.size());
         for (const auto& asset : assets) {
@@ -56,7 +58,7 @@ namespace asset_compute {
 
     //=============== COVARIANCE MATRIX & RELATED ================
 
-    void fill_cov_mat_precompute(precomputed_voc_mat_data& data, const std::vector<assets::asset>& assets){
+    inline void fill_cov_mat_precompute(precomputed_voc_mat_data& data, const std::vector<assets::asset>& assets){
         for (const auto& asset : assets) {
             std::unordered_map<uint32_t, double> lr_map;
             for (int i = 1; i < asset.n_data_points; ++i) {
@@ -82,7 +84,7 @@ namespace asset_compute {
 
     
 
-    std::unordered_map<uint32_t, double> avg_log_return_timestamp_map(const precomputed_voc_mat_data& data){
+    inline std::unordered_map<uint32_t, double> avg_log_return_timestamp_map(const precomputed_voc_mat_data& data){
         std::unordered_map<uint32_t, std::pair<double, size_t>> ts_accum;
         for (const auto& asset_lr_map : data.log_return_maps) {
              for (const auto& [ts, lr] : asset_lr_map) {
@@ -98,7 +100,7 @@ namespace asset_compute {
         return result;
     }
 
-    std::unordered_map<uint32_t, double> rolling_20d_equal_weighted_avg_log_return(const precomputed_voc_mat_data& data){
+    inline std::unordered_map<uint32_t, double> rolling_20d_equal_weighted_avg_log_return(const precomputed_voc_mat_data& data){
         std::unordered_map<uint32_t, double> ts_returns = avg_log_return_timestamp_map(data);
         std::vector<uint32_t> timestamps(ts_returns.size());
         std::transform(ts_returns.begin(), ts_returns.end(), timestamps.begin(), [](const auto& pair){ return pair.first; });
@@ -115,7 +117,7 @@ namespace asset_compute {
         return result;
     }
 
-    std::vector<std::vector<double>> aligned_log_returns(const precomputed_voc_mat_data& data, const std::unordered_set<uint32_t>* const timestamps = nullptr){ 
+    inline std::vector<std::vector<double>> aligned_log_returns(const precomputed_voc_mat_data& data, const std::unordered_set<uint32_t>* const timestamps = nullptr){ 
         std::vector<std::vector<double>> result;
 
         std::unordered_set<uint32_t> matching_timestamps;
@@ -135,7 +137,7 @@ namespace asset_compute {
         return result;
     }
 
-    double get_bottom_x_percentile(std::vector<double>& data, double x){
+    inline double get_bottom_x_percentile(std::vector<double>& data, double x){
         if(data.empty()) return 0.0;
         size_t idx = static_cast<size_t>(std::floor(x * data.size()));
         std::nth_element(data.begin(), data.begin() + idx, data.end());
@@ -144,7 +146,7 @@ namespace asset_compute {
 
    // 20d_avg_return <= 10% quantil
    // > 70% of assets have negative return
-    std::unordered_set<uint32_t> compute_stressed_timestamps(const precomputed_voc_mat_data& data, double btm_percentile_treshhold = 0.1, double min_negative_log_return_pct = 0.7){
+    inline std::unordered_set<uint32_t> compute_stressed_timestamps(const precomputed_voc_mat_data& data, double btm_percentile_treshhold = 0.1, double min_negative_log_return_pct = 0.7){
 
         std::unordered_map<uint32_t, double> rolling_log_r_avg = rolling_20d_equal_weighted_avg_log_return(data);
         std::vector<double> avg_returns(rolling_log_r_avg.size());
@@ -168,7 +170,7 @@ namespace asset_compute {
         ENTRY POINT FOR COVARIANCE MATRIX CALCULATION
         If stressed is false, we compute the covariance matrix using all common timestamps
     */
-    Mat compute_covariance_matrix(const std::vector<assets::asset>& assets, bool stressed = false){
+    inline Mat compute_covariance_matrix(const std::vector<assets::asset>& assets, bool stressed = false){
         size_t n_assets = assets.size();
         Mat cov_matrix(n_assets, n_assets);
 
@@ -211,7 +213,7 @@ namespace asset_compute {
         return cov_matrix;
     }
 
-    std::pair<Mat, Mat> compute_cov_matricies(const std::vector<assets::asset>& assets){
+    inline std::pair<Mat, Mat> compute_cov_matricies(const std::vector<assets::asset>& assets){
         size_t n_assets = assets.size();
 
         precomputed_voc_mat_data precompute_data;
@@ -258,7 +260,7 @@ namespace asset_compute {
         return {cov_matrix, cov_matrix_stressed};
     }
 
-    void normalize_covariance_matrix(Mat& cov_matrix){
+    inline void normalize_covariance_matrix(Mat& cov_matrix){
         auto n_rows = cov_matrix.rows();
         auto n_cols = cov_matrix.cols();
         auto diag = cov_matrix.diagonal().eval();
@@ -270,7 +272,7 @@ namespace asset_compute {
         }
     }
 
-    Mat cholesky_decomp(const Mat& cov_mat){
+    inline Mat cholesky_decomp(const Mat& cov_mat){
         Eigen::LLT<Mat> llt(cov_mat);
         if(llt.info() == Eigen::NumericalIssue){
             throw std::runtime_error("Covariance matrix is not positive definite");
@@ -280,7 +282,7 @@ namespace asset_compute {
 
     // =============== OTHER ASSET METRICS ================
 
-    double volatility(const assets::asset& asset){
+    inline double volatility(const assets::asset& asset){
         double avg_return = avg_log_return(asset);
         double volatility_sum = 0.0;
         for(size_t i = 1; i < (size_t)asset.n_data_points; i++){
@@ -290,7 +292,7 @@ namespace asset_compute {
         return std::sqrt(volatility_sum / (asset.n_data_points - 1));
     }
 
-    double excess_kurtosis(const assets::asset& asset) {
+    inline double excess_kurtosis(const assets::asset& asset) {
         if (asset.n_data_points < 2) {
             return 0.0;
         }
@@ -312,7 +314,7 @@ namespace asset_compute {
         return sum / static_cast<double>(n_returns) - 3.0;
     }
 
-    double dof_excess_kurtosis(const assets::asset& asset){
+    inline double dof_excess_kurtosis(const assets::asset& asset){
         double kurtosis_sum = excess_kurtosis(asset);
          return (4 + 6/kurtosis_sum) > 0 ? kurtosis_sum : std::numeric_limits<double>::infinity(); 
          //Formula to get dof for student-t distribution based on excess kurtosis, if the result is negative 
@@ -321,7 +323,7 @@ namespace asset_compute {
 
 
 
-    double max_drawdown(const assets::asset& asset){
+    inline double max_drawdown(const assets::asset& asset){
         double max_drawdown = 0.0;
         double peak = asset.data_points[0].adjclose;
         for(size_t i = 1; i < asset.n_data_points; i++){
@@ -336,13 +338,13 @@ namespace asset_compute {
         return max_drawdown;
     }
 
-    double sharpe_ratio(const assets::asset& asset, double risk_free_rate = 0.04){
+    inline double sharpe_ratio(const assets::asset& asset, double risk_free_rate = 0.04){
         double avg_return = avg_log_return(asset)*252; //Annualize
         double vol = volatility(asset)*std::sqrt(252); //Annualize
         return (avg_return - risk_free_rate) / vol;
     }
 
-    double ytd_return(const assets::asset& asset){
+    inline double ytd_return(const assets::asset& asset){
         std::time_t now = std::time(nullptr);
         std::tm* now_tm = std::localtime(&now);
         int current_year = now_tm->tm_year + 1900;
@@ -362,7 +364,7 @@ namespace asset_compute {
         return (end_price - start_price) / start_price;
     }
 
-    double skewness(const assets::asset& asset){
+    inline double skewness(const assets::asset& asset){
         double avg = avg_log_return(asset);
         double vol = volatility(asset);
         double sum = 0.0;
@@ -374,7 +376,7 @@ namespace asset_compute {
 
 
     //======== DEPRECATED ==============
-     [[deprecated]] std::vector<std::pair<double,double>> log_return_aligned_assets_for_timestamps(const assets::asset& asset1, const assets::asset& asset2, const std::unordered_set<uint32_t>& timestamps) {
+     [[deprecated]] inline std::vector<std::pair<double,double>> log_return_aligned_assets_for_timestamps(const assets::asset& asset1, const assets::asset& asset2, const std::unordered_set<uint32_t>& timestamps) {
         std::vector<std::pair<double,double>> aligned_returns_vec(asset1.n_data_points, {0.0, 0.0});
         size_t j = 0;
         size_t k = 0;
@@ -395,7 +397,7 @@ namespace asset_compute {
         return aligned_returns_vec;
     }
 
-      [[deprecated]] std::vector<std::pair<double,double>> log_return_aligned_assets(const assets::asset& asset1, const assets::asset& asset2) {
+      [[deprecated]] inline std::vector<std::pair<double,double>> log_return_aligned_assets(const assets::asset& asset1, const assets::asset& asset2) {
         std::vector<std::pair<double,double>> aligned_returns_vec(asset1.n_data_points, {0.0, 0.0});
         size_t j = 0;
         size_t k = 0;
@@ -415,7 +417,7 @@ namespace asset_compute {
         return aligned_returns_vec;
     }
 
-    [[deprecated]] int32_t count_assets_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
+    [[deprecated]] inline int32_t count_assets_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
         int32_t counts = 0;
         for (const auto& asset : assets) {
             for (size_t i = 1; i <asset.n_data_points; i++) {
@@ -428,7 +430,7 @@ namespace asset_compute {
         return counts;
     }
 
-    [[deprecated]] size_t count_negative_log_returns_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
+    [[deprecated]] inline size_t count_negative_log_returns_for_timestamp(const std::vector<assets::asset>& assets, uint32_t timestamp){
         size_t count = 0;
         for (const auto& asset : assets) {
             for (size_t i = 1; i < static_cast<size_t>(asset.n_data_points); i++) {

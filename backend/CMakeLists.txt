@@ -5,6 +5,7 @@ project(Meridian VERSION 0.1.0 LANGUAGES C CXX)
 
 add_executable(Meridian 
     src/main.cpp
+    src/computing/monte_carlo_engine.cpp
     src/models/assets.h
     src/thirdparty/httplib.h
     src/thirdparty/json.hpp
