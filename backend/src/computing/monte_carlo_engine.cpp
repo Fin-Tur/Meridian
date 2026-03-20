@@ -26,7 +26,7 @@ namespace monte_carlo {
     // ---- Regime lookup tables ----
     std::unordered_map<regimes, double> regime_vol_multiplier = {
         {regimes::CALM,    0.8},
-        {regimes::ENERGIC, 1.4},
+        {regimes::ENERGIC, 1.4}, 
         {regimes::CRISIS,  2.5}
     };
 
@@ -49,9 +49,9 @@ namespace monte_carlo {
                 return regimes::ENERGIC;
                 break;
             case regimes::CRISIS:
-                if(x < 0.25) return regimes::CALM;
-                if(x < 0.55) return regimes::CRISIS;
-                return regimes::ENERGIC;
+                if(x < 0.15) return regimes::CALM;
+                if(x < 0.35) return regimes::ENERGIC;
+                return regimes::CRISIS;
                 break;
         }
         return regimes::CALM; // unreachable, suppresses missing-return warning
@@ -83,8 +83,7 @@ namespace monte_carlo {
             sigma = asset_compute::volatility(assets[i]);
             sigma_sq = sigma * sigma;
             for(size_t j = 1; j < assets[i].n_data_points; j++){
-                double r = std::log(assets[i].data_points[j].adjclose /
-                                    assets[i].data_points[j-1].adjclose);
+                double r = assets[i].data_points[j].log_return;
                 sigma_sq = lambda * sigma_sq + (1 - lambda) * r * r;
             }
 

@@ -3,16 +3,17 @@
 #include "computing/asset_computing.h"
 #include "computing/monte_carlo_engine.h"
 #include "api/server.h"
+#include "computing/backtesting.h"
 
 int main() {
 
-    server s = server();
-    s.run("localhost", 8080);
+    //server s = server();
+    //s.run("localhost", 8080);
 
-    /*std::vector<assets::asset> assets;
+    std::vector<assets::asset> assets;
     std::string symbols[] = {"AAPL", "MSFT", "GOOGL"};
     for(auto& sym : symbols){
-        assets::asset a = data_fetcher::fetch_stock(sym);
+        assets::asset a = data_fetcher::fetch_stock(sym, "10y");
         asset_compute::compute_log_return_for_asset(a);
         assets.push_back(a);
     }
@@ -21,8 +22,19 @@ int main() {
     config.drift_scenario = monte_carlo::drift_scenario::SHRINKAGE_25;
     config.vol_model = monte_carlo::volatility_model::EWMA_75;
     config.multivariate_t = true;
+    config.regimes = true;
 
-    monte_carlo::sim_preset preset = monte_carlo::generate_sim_preset(assets, {0.4, 0.4, 0.2}, 10000, 21, config);
+    std::vector<double> weights = {0.4, 0.4, 0.2};
+    testing::job j = testing::prepare_backtest_job(assets, weights, 5000, 2, 100, config);
+    testing::test_result res = testing::run_backtest(j);
+
+    std::cout << "Exceedance Rate 95%: " << res.exceedance_rate_95 << "\n";
+    std::cout << "Exceedance Rate 99%: " << res.exceedance_rate_99 << "\n";
+    std::cout << "Kupiec LR 95%: " << res.kupiec_lr_95 << " Pass: " << res.kupiec_95_pass << "\n";
+    std::cout << "Kupiec LR 99%: " << res.kupiec_lr_99 << " Pass: " << res.kupiec_99_pass << "\n";
+    std::cout << "Christoffersen LR: " << res.christoffersen_lr << " Pass: " << res.christoffersen_pass << "\n";
+
+    /*monte_carlo::sim_preset preset = monte_carlo::generate_sim_preset(assets, {0.4, 0.4, 0.2}, 10000, 21, config);
     auto result = monte_carlo::run_simulation(preset, config);
 
     std::cout << "VaR 95%: " << result.var_95 << std::endl;

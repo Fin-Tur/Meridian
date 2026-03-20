@@ -13,7 +13,7 @@
 
 namespace asset_compute {
 
-    struct precomputed_voc_mat_data {
+    struct precomputed_cov_mat_data {
         std::unordered_map<uint32_t, size_t> neg_count_map;
         std::unordered_map<uint32_t, size_t> total_count_map;
         std::vector<std::unordered_map<uint32_t, double>> log_return_maps;
@@ -58,7 +58,7 @@ namespace asset_compute {
 
     //=============== COVARIANCE MATRIX & RELATED ================
 
-    inline void fill_cov_mat_precompute(precomputed_voc_mat_data& data, const std::vector<assets::asset>& assets){
+    inline void fill_cov_mat_precompute(precomputed_cov_mat_data& data, const std::vector<assets::asset>& assets){
         for (const auto& asset : assets) {
             std::unordered_map<uint32_t, double> lr_map;
             for (int i = 1; i < asset.n_data_points; ++i) {
@@ -84,7 +84,7 @@ namespace asset_compute {
 
     
 
-    inline std::unordered_map<uint32_t, double> avg_log_return_timestamp_map(const precomputed_voc_mat_data& data){
+    inline std::unordered_map<uint32_t, double> avg_log_return_timestamp_map(const precomputed_cov_mat_data& data){
         std::unordered_map<uint32_t, std::pair<double, size_t>> ts_accum;
         for (const auto& asset_lr_map : data.log_return_maps) {
              for (const auto& [ts, lr] : asset_lr_map) {
@@ -100,7 +100,7 @@ namespace asset_compute {
         return result;
     }
 
-    inline std::unordered_map<uint32_t, double> rolling_20d_equal_weighted_avg_log_return(const precomputed_voc_mat_data& data){
+    inline std::unordered_map<uint32_t, double> rolling_20d_equal_weighted_avg_log_return(const precomputed_cov_mat_data& data){
         std::unordered_map<uint32_t, double> ts_returns = avg_log_return_timestamp_map(data);
         std::vector<uint32_t> timestamps(ts_returns.size());
         std::transform(ts_returns.begin(), ts_returns.end(), timestamps.begin(), [](const auto& pair){ return pair.first; });
@@ -117,7 +117,7 @@ namespace asset_compute {
         return result;
     }
 
-    inline std::vector<std::vector<double>> aligned_log_returns(const precomputed_voc_mat_data& data, const std::unordered_set<uint32_t>* const timestamps = nullptr){ 
+    inline std::vector<std::vector<double>> aligned_log_returns(const precomputed_cov_mat_data& data, const std::unordered_set<uint32_t>* const timestamps = nullptr){ 
         std::vector<std::vector<double>> result;
 
         std::unordered_set<uint32_t> matching_timestamps;
@@ -146,7 +146,7 @@ namespace asset_compute {
 
    // 20d_avg_return <= 10% quantil
    // > 70% of assets have negative return
-    inline std::unordered_set<uint32_t> compute_stressed_timestamps(const precomputed_voc_mat_data& data, double btm_percentile_treshhold = 0.1, double min_negative_log_return_pct = 0.7){
+    inline std::unordered_set<uint32_t> compute_stressed_timestamps(const precomputed_cov_mat_data& data, double btm_percentile_treshhold = 0.1, double min_negative_log_return_pct = 0.7){
 
         std::unordered_map<uint32_t, double> rolling_log_r_avg = rolling_20d_equal_weighted_avg_log_return(data);
         std::vector<double> avg_returns(rolling_log_r_avg.size());
@@ -163,7 +163,6 @@ namespace asset_compute {
                 }
             }
         }
-        std::cout << "Identified " << stressed_timestamps.size() << " stressed timestamps out of " << rolling_log_r_avg.size() << " total timestamps." << std::endl;
         return stressed_timestamps;
     }
     /*
@@ -174,7 +173,7 @@ namespace asset_compute {
         size_t n_assets = assets.size();
         Mat cov_matrix(n_assets, n_assets);
 
-        precomputed_voc_mat_data precompute_data;
+        precomputed_cov_mat_data precompute_data;
         precompute_data.n_assets = n_assets;
         fill_cov_mat_precompute(precompute_data, assets);
 
@@ -216,7 +215,7 @@ namespace asset_compute {
     inline std::pair<Mat, Mat> compute_cov_matricies(const std::vector<assets::asset>& assets){
         size_t n_assets = assets.size();
 
-        precomputed_voc_mat_data precompute_data;
+        precomputed_cov_mat_data precompute_data;
         precompute_data.n_assets = n_assets;
         fill_cov_mat_precompute(precompute_data, assets);
 
