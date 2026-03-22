@@ -16,12 +16,10 @@ namespace testing {
     struct test_result {
         double exceedance_rate_95;
         double exceedance_rate_99;
-        double kupiec_lr_95;
-        double kupiec_lr_99;
-        bool kupiec_95_pass;
-        bool kupiec_99_pass;
         double christoffersen_lr;
         bool christoffersen_pass;
+        double median_return_diff;
+        double avg_return_diff;
     };
 
     struct precompute_sim_params {

@@ -112,7 +112,8 @@ namespace testing {
                     double mu2 = mu * mu;
                     double sum4th = s4[new_incl_dps-1] - 4.0*mu*s3[new_incl_dps-1] + 6.0*mu2*s2[new_incl_dps-1] - 4.0*mu2*mu*s1[new_incl_dps-1] + n_lr*mu2*mu2;
                     double kurtosis = (sum4th / n_lr) / (si*si*si*si) - 3.0;
-                    raw_df = (4.0 + 6.0 / kurtosis) > 0.0 ? kurtosis : std::numeric_limits<double>::infinity();
+                    double df_candidate = 4.0 + 6.0 / kurtosis;
+                    raw_df = df_candidate > 0.0 ? df_candidate : std::numeric_limits<double>::infinity();
                 }
 
                 double df = std::max(raw_df, 5.0);
@@ -122,8 +123,6 @@ namespace testing {
         }
     }
 
-    // avg_fd[testing_idx]: gewichteter Durchschnitt der df-Werte aller Assets.
-    // Identisch zu monte_carlo_engine.cpp: gewichtete Summe / n_assets.
     void _compute_dof_avg(precompute_sim_params& pc, const std::vector<double>& weights){
         const size_t n_assets = pc.df.empty() ? 0 : pc.df[0].size();
         pc.avg_fd.assign(pc.n_testings, 0.0);
@@ -131,11 +130,11 @@ namespace testing {
             double avg = 0.0;
             for(size_t a = 0; a < n_assets; a++)
                 avg += pc.df[t][a] * weights[a];
-            pc.avg_fd[t] = avg / n_assets;
+            pc.avg_fd[t] = avg;
         }
     }
 
-    void _compute_cholesky_cov_mats(precompute_sim_params& pc, std::vector<assets::asset>& assets){
+    void _compute_cholesky_cov_mats(precompute_sim_params& pc, std::vector<assets::asset>& assets, bool multiple_matrices = false){
         pc.cholesky_cov_mats.assign(pc.n_testings, std::unordered_map<monte_carlo::regimes, Mat>());
 
         std::vector<int32_t> orig_dps(assets.size());
@@ -146,9 +145,19 @@ namespace testing {
         for(size_t a = 0; a < assets.size(); a++)
             assets[a].n_data_points = included_dps;
 
-        auto [cov_matrix, cov_matrix_stressed] = asset_compute::compute_cov_matricies(assets);
-        asset_compute::normalize_covariance_matrix(cov_matrix);
-        asset_compute::normalize_covariance_matrix(cov_matrix_stressed);
+            Mat cov_matrix, cov_matrix_stressed;
+
+        if(!multiple_matrices){
+            cov_matrix = asset_compute::compute_covariance_matrix(assets, false);
+            asset_compute::normalize_covariance_matrix(cov_matrix);
+        }else{
+            auto [cov_matrix_temp, cov_matrix_stressed_temp] = asset_compute::compute_cov_matricies(assets);
+            cov_matrix = cov_matrix_temp;
+            cov_matrix_stressed = cov_matrix_stressed_temp;
+            asset_compute::normalize_covariance_matrix(cov_matrix);
+            asset_compute::normalize_covariance_matrix(cov_matrix_stressed);
+
+        }
 
         uint32_t counter_normal  = 0;
         uint32_t counter_stressed = 0;
@@ -167,7 +176,7 @@ namespace testing {
                     cov_matrix = asset_compute::compute_covariance_matrix(assets, false);
                     asset_compute::normalize_covariance_matrix(cov_matrix);
                 }
-                if(counter_stressed >= 30){
+                if(counter_stressed >= 30 && multiple_matrices){
                     counter_stressed = 0;
                     cov_matrix_stressed = asset_compute::compute_covariance_matrix(assets, true);
                     asset_compute::normalize_covariance_matrix(cov_matrix_stressed);
@@ -175,8 +184,8 @@ namespace testing {
             }
 
             pc.cholesky_cov_mats[t][monte_carlo::regimes::CALM]    = asset_compute::cholesky_decomp(cov_matrix);
-            pc.cholesky_cov_mats[t][monte_carlo::regimes::ENERGIC] = asset_compute::cholesky_decomp(0.6 * cov_matrix + 0.4 * cov_matrix_stressed);
-            pc.cholesky_cov_mats[t][monte_carlo::regimes::CRISIS]  = asset_compute::cholesky_decomp(cov_matrix_stressed);
+            if(multiple_matrices) pc.cholesky_cov_mats[t][monte_carlo::regimes::ENERGIC] = asset_compute::cholesky_decomp(0.6 * cov_matrix + 0.4 * cov_matrix_stressed);
+            if(multiple_matrices) pc.cholesky_cov_mats[t][monte_carlo::regimes::CRISIS]  = asset_compute::cholesky_decomp(cov_matrix_stressed);
         }
 
         for(size_t a = 0; a < assets.size(); a++)
@@ -185,6 +194,17 @@ namespace testing {
 
 
     job prepare_backtest_job(std::vector<assets::asset>& assets, std::vector<double>& weights, size_t n_sims, int testing_period, int n_testings ,monte_carlo::sim_config config){
+
+        precompute_sim_params pc;
+        pc.testing_period = testing_period;
+        pc.n_testings = n_testings;
+        _compute_sigma(pc, assets);
+        _compute_sigma_ewma(pc, assets);
+        _compute_mu(pc, assets);
+        _compute_dof_each(pc, assets);
+        if(config.multivariate_t) _compute_dof_avg(pc, weights);
+        _compute_cholesky_cov_mats(pc, assets, config.regimes);
+
         job j;
         j.config = config;
         j.n_testings = n_testings;
@@ -192,48 +212,34 @@ namespace testing {
         j.portfolio_values.resize(n_testings, 0.0);
         j.presets.reserve(n_testings);
 
-        //First preset
-        for(auto& asset : assets){
-            j.portfolio_values[0] += asset.data_points[asset.n_data_points].adjclose * weights[&asset - &assets[0]];
-            asset.n_data_points-=testing_period; 
-        }
-        j.presets[0] = monte_carlo::generate_sim_preset(assets, weights, n_sims, testing_period, config, j.portfolio_values[0]);
         
-        //Following
-        for(int i = 1; i < n_testings; i++){
-            for(auto& asset : assets){
-                j.portfolio_values[i] += asset.data_points[asset.n_data_points].adjclose * weights[&asset - &assets[0]];
-                asset.n_data_points-=testing_period; 
-            }
-            monte_carlo::sim_preset preset;
-        }
+        for(int i = 0; i < n_testings; i++){
 
+            for(size_t a = 0; a < assets.size(); a++)
+                j.portfolio_values[i] += assets[a].data_points[assets[a].n_data_points - testing_period*i - 1 ].adjclose * weights[a];
+
+            monte_carlo::sim_preset preset;
+            preset.portfolio_value = j.portfolio_values[i];
+            preset.n_assets = assets.size();
+            preset.n_sims = n_sims;
+            preset.horizon_days = testing_period;
+            preset.weight = Vec::Map(weights.data(), weights.size());
+            preset.mu = pc.mu[i];
+            preset.sigma = pc.sigma[i];
+            if(config.vol_model != monte_carlo::volatility_model::HISTORICAL) preset.sigma_ewma = pc.sigma_ewma[i];
+            if(config.multivariate_t) preset.avg_df = pc.avg_fd[i];
+            else preset.df = pc.df[i];
+            preset.cholesky_cov_mats = pc.cholesky_cov_mats[i];
+            j.presets.push_back(preset);
+        }
         
         return j;
     }
 
-
-    /*job prepare_backtest_job(std::vector<assets::asset>& assets, std::vector<double>& weights, size_t n_sims, int testing_period, int n_testings ,monte_carlo::sim_config config){
-        job j;
-        j.config = config;
-        j.n_testings = n_testings;
-        j.test_period = testing_period;
-        j.portfolio_values.resize(n_testings, 0.0);
-
-        for(int i = 0; i < n_testings; i++){
-            for(auto& asset : assets){
-                asset.n_data_points-=testing_period; 
-                j.portfolio_values[i] += asset.data_points[asset.n_data_points].adjclose * weights[&asset - &assets[0]];
-            }
-            j.presets.push_back(monte_carlo::generate_sim_preset(assets, weights, n_sims, testing_period, config, j.portfolio_values[i]));
-            std::cout << "Prepared preset " << i+1 << "/" << n_testings << "\r" << std::flush;
-        }
-
-        return j;
-    }*/
-
     test_result run_backtest(const job& j) {
         test_result result;
+
+        std::vector<double> simulated_off_percentages(j.n_testings - 1);
 
         uint32_t exceed_95 = 0;
         uint32_t exceed_99 = 0;
@@ -241,8 +247,6 @@ namespace testing {
         uint32_t n_00 = 0, n_01 = 0, n_10 = 0, n_11 = 0;
         bool exceeded_before = false;
 
-        // portfolio_values ist in umgekehrter Zeitreihenfolge: [0] = neuester, [n-1] = ältester
-        // preset[i] simuliert ab portfolio_values[i] vorwärts -> tatsächliches Ergebnis ist portfolio_values[i-1]
         for(int i = 1; i < j.n_testings; i++) {
             auto sim_res = monte_carlo::run_simulation(j.presets[i], j.config);
 
@@ -255,7 +259,6 @@ namespace testing {
 
             bool exceeded = actual_loss > var_95_pct;
 
-            // Christoffersen Übergangsmatrix befüllen
             if(exceeded_before && exceeded)  n_11++;
             if(exceeded_before && !exceeded) n_10++;
             if(!exceeded_before && exceeded) n_01++;
@@ -267,26 +270,15 @@ namespace testing {
             }
 
             exceeded_before = exceeded;
+
+            simulated_off_percentages[i-1] = sim_res.median / j.portfolio_values[i];
         }
 
         // ── Exceedance Rates ──────────────────────────────────────────────────
-        result.exceedance_rate_95 = static_cast<double>(exceed_95) / j.n_testings;
-        result.exceedance_rate_99 = static_cast<double>(exceed_99) / j.n_testings;
+        const uint32_t n_obs = j.n_testings - 1;
+        result.exceedance_rate_95 = static_cast<double>(exceed_95) / n_obs;
+        result.exceedance_rate_99 = static_cast<double>(exceed_99) / n_obs;
 
-        // ── Kupiec Test ──────────────────────────────────────────
-        auto kupiec = [&](double p, uint32_t x, uint32_t T) -> double {
-            double p_hat = static_cast<double>(x) / T;
-            if(p_hat <= 0.0 || p_hat >= 1.0) return 0.0;
-            return -2.0 * (
-                (T - x) * std::log(1.0 - p)     + x * std::log(p) -
-                (T - x) * std::log(1.0 - p_hat) - x * std::log(p_hat)
-            );
-        };
-
-        result.kupiec_lr_95   = kupiec(0.05, exceed_95, j.n_testings);
-        result.kupiec_lr_99   = kupiec(0.01, exceed_99, j.n_testings);
-        result.kupiec_95_pass = result.kupiec_lr_95 < 3.841;
-        result.kupiec_99_pass = result.kupiec_lr_99 < 6.635;
 
         // ── Christoffersen Test ───────────────────────────────────────────────
         double p_01 = (n_00 + n_01) > 0 ?
@@ -309,6 +301,16 @@ namespace testing {
         }
 
         result.christoffersen_pass = result.christoffersen_lr < 3.841;
+
+        // ── Median Return Difference ─────────────────────────────────────────
+
+        std::sort(simulated_off_percentages.begin(), simulated_off_percentages.end());
+        result.median_return_diff = simulated_off_percentages[simulated_off_percentages.size() / 2] - 1.0;
+        double sum = 0.0;
+        for (const auto& val : simulated_off_percentages) {
+            sum += val;
+        }
+        result.avg_return_diff = sum / simulated_off_percentages.size() - 1.0;
 
         return result;
     }

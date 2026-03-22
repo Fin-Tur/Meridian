@@ -30,9 +30,9 @@ int main() {
 
     std::cout << "Exceedance Rate 95%: " << res.exceedance_rate_95 << "\n";
     std::cout << "Exceedance Rate 99%: " << res.exceedance_rate_99 << "\n";
-    std::cout << "Kupiec LR 95%: " << res.kupiec_lr_95 << " Pass: " << res.kupiec_95_pass << "\n";
-    std::cout << "Kupiec LR 99%: " << res.kupiec_lr_99 << " Pass: " << res.kupiec_99_pass << "\n";
     std::cout << "Christoffersen LR: " << res.christoffersen_lr << " Pass: " << res.christoffersen_pass << "\n";
+    std::cout << "Median Return Difference: " << res.median_return_diff << "\n";
+    std::cout << "Average Return Difference: " << res.avg_return_diff << "\n";
 
     monte_carlo::sim_preset preset = monte_carlo::generate_sim_preset(assets, {0.4, 0.4, 0.2}, 10000, 21, config);
     auto result = monte_carlo::run_simulation(preset, config);
@@ -41,9 +41,9 @@ int main() {
     std::cout << "VaR 99%: " << result.var_99 << std::endl;
     std::cout << "CVaR 95%: " << result.cvar_95 << std::endl;
     std::cout << "CVaR 99%: " << result.cvar_99 << std::endl;
-    std::cout << "Median: " << result.median << std::endl;*/
+    std::cout << "Median: " << result.median << std::endl;
 
-    /*auto m = asset_compute::compute_covariance_matrix(assets, false);
+    auto m = asset_compute::compute_covariance_matrix(assets, false);
     asset_compute::normalize_covariance_matrix(m);
     std::cout << "Covariance Matrix:" << std::endl;
     std::cout << m << std::endl;

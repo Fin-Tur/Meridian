@@ -13,7 +13,6 @@ add_executable(Meridian
     src/api/server.h
     src/computing/asset_computing.h
     src/computing/monte_carlo_engine.h
-    src/computing/monte_carlo_engine.cpp
     src/computing/backtesting.h
     src/computing/backtesting.cpp
     src/models/currency.h
