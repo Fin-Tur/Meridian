@@ -7,10 +7,10 @@
 
 int main() {
 
-    //server s = server();
-    //s.run("localhost", 8080);
+    server s = server();
+    s.run("localhost", 8080);
 
-    std::vector<assets::asset> assets;
+    /*std::vector<assets::asset> assets;
     std::string symbols[] = {"AAPL", "MSFT", "GOOGL"};
     for(auto& sym : symbols){
         assets::asset a = data_fetcher::fetch_stock(sym, "10y");
@@ -34,7 +34,7 @@ int main() {
     std::cout << "Kupiec LR 99%: " << res.kupiec_lr_99 << " Pass: " << res.kupiec_99_pass << "\n";
     std::cout << "Christoffersen LR: " << res.christoffersen_lr << " Pass: " << res.christoffersen_pass << "\n";
 
-    /*monte_carlo::sim_preset preset = monte_carlo::generate_sim_preset(assets, {0.4, 0.4, 0.2}, 10000, 21, config);
+    monte_carlo::sim_preset preset = monte_carlo::generate_sim_preset(assets, {0.4, 0.4, 0.2}, 10000, 21, config);
     auto result = monte_carlo::run_simulation(preset, config);
 
     std::cout << "VaR 95%: " << result.var_95 << std::endl;

@@ -24,6 +24,7 @@
    - 3.4 [Result-Analysis](#34-result-analysis)
 4. [API Reference](#3-api-reference)
 5. [Build & Setup](#4-build--setup)
+7. [View](#5-view)
 
 ---
 
@@ -295,3 +296,6 @@ cmake -B build && cmake --build build
 cd frontend
 npm install && npm run dev
 ```
+
+## 6. View
+

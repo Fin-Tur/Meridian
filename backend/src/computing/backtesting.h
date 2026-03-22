@@ -46,7 +46,7 @@ namespace testing {
 
     void _compute_dof_avg(precompute_sim_params& pc, const std::vector<double>& weights);
 
-    void _compute_cholesky_cov_mats(precompute_sim_params& pc){}
+    inline void _compute_cholesky_cov_mats(precompute_sim_params& pc){}
 
 
 
