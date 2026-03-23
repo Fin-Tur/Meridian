@@ -279,7 +279,8 @@ namespace testing {
 
             exceeded_before = exceeded;
 
-            simulated_off_percentages[i-1] = sim_res.median / j.portfolio_values[i];
+            simulated_off_percentages[i-1] = sim_res.median / j.portfolio_values[i] - 1.0;
+
         }
 
         // ── Exceedance Rates ──────────────────────────────────────────────────
@@ -313,12 +314,12 @@ namespace testing {
         // ── Median Return Difference ─────────────────────────────────────────
 
         std::sort(simulated_off_percentages.begin(), simulated_off_percentages.end());
-        result.median_return_diff = simulated_off_percentages[simulated_off_percentages.size() / 2] - 1.0;
+        result.median_return_diff = simulated_off_percentages[simulated_off_percentages.size() / 2];
         double sum = 0.0;
         for (const auto& val : simulated_off_percentages) {
             sum += val;
         }
-        result.avg_return_diff = sum / simulated_off_percentages.size() - 1.0;
+        result.avg_return_diff = sum / simulated_off_percentages.size();
 
         return result;
     }
