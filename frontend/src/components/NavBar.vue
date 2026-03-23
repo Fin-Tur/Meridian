@@ -20,6 +20,9 @@ import { RouterLink } from 'vue-router'
         <RouterLink to="/explorer" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary no-underline transition-all hover:text-text-primary hover:bg-accent-muted [&.router-link-exact-active]:text-accent [&.router-link-exact-active]:bg-accent-muted">
           Asset Explorer
         </RouterLink>
+        <RouterLink to="/backtest" class="px-4 py-2 rounded-lg text-sm font-medium text-text-secondary no-underline transition-all hover:text-text-primary hover:bg-accent-muted [&.router-link-exact-active]:text-accent [&.router-link-exact-active]:bg-accent-muted">
+          Backtest
+        </RouterLink>
       </div>
     </div>
   </nav>

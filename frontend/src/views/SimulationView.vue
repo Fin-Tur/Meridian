@@ -9,7 +9,8 @@ import { fetch_simulation } from '@/services/api.js'
 import InfoCard from '@/components/InfoCard.vue'
 import Histogram from '@/components/Histogram.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
-import { usePortfolioStore } from '@/stores/counter.js'
+import { usePortfolioStore } from '@/stores/portfolio.js'
+import { useSimConfigStore } from '@/stores/sim_config.js'
 import BackArrow from '@/components/BackArrow.vue'
 import TooltipComp from '@/components/TooltipComp.vue'
 
@@ -17,19 +18,14 @@ ChartJS.register(BarElement, CategoryScale, LinearScale, Tooltip, Legend)
 
 const simulation = ref(null)
 const loading = ref(false)
-const store = usePortfolioStore()
+const portfolio = usePortfolioStore()
+const simConfig = useSimConfigStore()
 
-const n_sims = ref(1000)
-const horizon_days = ref(30)
-const drift_scenario = ref('SHRINKAGE_25')
-const volatility_scenario = ref('EMWA_75')
-const multivariate_t = ref("ENABLED")
-const regimes = ref('ENABLED')
 const display_unit = ref('$')
 
 async function start_simulation(){
   loading.value = true
-  simulation.value = await fetch_simulation(n_sims.value, horizon_days.value, drift_scenario.value, volatility_scenario.value, multivariate_t.value, regimes.value)
+  simulation.value = await fetch_simulation()
   loading.value = false
 }
 
@@ -38,7 +34,7 @@ const histLabels = computed(() => {
   const labels = []
   for (let i = 0; i < 50; i++) {
     const binAmount = ((simulation.value.min + i * simulation.value.bin_width)).toFixed(0)
-    const pct = store.pctOfPortfolio(binAmount)
+    const pct = portfolio.pctOfPortfolio(binAmount)
     labels.push((pct-100).toFixed(2))
   }
   return labels
@@ -69,24 +65,24 @@ function openSettings(){
     <template v-else-if="simulation">
       <!-- Stats -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-        <InfoCard title="Starting Portfolio Value" :val="store.portfolio_value" :type="'currency'" :decimals="2" />
-        <InfoCard v-if="display_unit==='$'" title="Median Return" :val="simulation.med_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Median Return over all simulation values.'"/>
-        <InfoCard v-else title="Median Return" :val="(store.pctOfPortfolio(simulation.med_return)/100)-1" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Median Return over all simulation values.'"/>
-        <InfoCard v-if="display_unit==='$'" title="Average Return" :val="simulation.avg_return-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Average Return over all simulation values. This may be distored by extreme outliers in the simulation.'"/>
-        <InfoCard v-else title="Average Return" :val="((store.pctOfPortfolio(simulation.avg_return)-100)/100)" :type="'beneficial-percentile'" :decimals="2" :tooltip="'Average Return over all simulation values. This may be distored by extreme outliers in the simulation.'"/>
-        <InfoCard v-if="display_unit==='$'" title="Max Loss" :val="simulation.min-store.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Maximum Loss over all simulation values.'"/>
-        <InfoCard v-else title="Max Loss" :val="(store.pctOfPortfolio(simulation.min)/100)-1" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Maximum Loss over all simulation values.'"/>
+        <InfoCard title="Starting Portfolio Value" :val="portfolio.portfolio_value" :type="'currency'" :decimals="2" />
+        <InfoCard v-if="display_unit==='$'" title="Median Return" :val="simulation.med_return-portfolio.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Median Return over all simulation values.'"/>
+        <InfoCard v-else title="Median Return" :val="(portfolio.pctOfPortfolio(simulation.med_return)/100)-1" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Median Return over all simulation values.'"/>
+        <InfoCard v-if="display_unit==='$'" title="Average Return" :val="simulation.avg_return-portfolio.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Average Return over all simulation values. This may be distored by extreme outliers in the simulation.'"/>
+        <InfoCard v-else title="Average Return" :val="((portfolio.pctOfPortfolio(simulation.avg_return)-100)/100)" :type="'beneficial-percentile'" :decimals="2" :tooltip="'Average Return over all simulation values. This may be distored by extreme outliers in the simulation.'"/>
+        <InfoCard v-if="display_unit==='$'" title="Max Loss" :val="simulation.min-portfolio.portfolio_value" :type="'beneficial-currency'" :decimals="2" :tooltip="'Maximum Loss over all simulation values.'"/>
+        <InfoCard v-else title="Max Loss" :val="(portfolio.pctOfPortfolio(simulation.min)/100)-1" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Maximum Loss over all simulation values.'"/>
       </div>
 
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <InfoCard v-if="display_unit==='$'" title="Var 95%" :val="-simulation.var95" :type="'currency-beneficial'" :decimals="2" :tooltip="'Value at Risk (95%) over all simulation values.'"/>
-        <InfoCard v-else title="Var 95%" :val="-store.pctOfPortfolio(simulation.var95)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Value at Risk (95%) over all simulation values.'"/>
+        <InfoCard v-else title="Var 95%" :val="-portfolio.pctOfPortfolio(simulation.var95)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Value at Risk (95%) over all simulation values.'"/>
         <InfoCard v-if="display_unit==='$'" title="Var 99%" :val="-simulation.var99" :type="'currency-beneficial'" :decimals="2" :tooltip="'Value at Risk (99%) over all simulation values.'"/>
-        <InfoCard v-else title="Var 99%" :val="-store.pctOfPortfolio(simulation.var99)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Value at Risk (99%) over all simulation values.'"/>
+        <InfoCard v-else title="Var 99%" :val="-portfolio.pctOfPortfolio(simulation.var99)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Value at Risk (99%) over all simulation values.'"/>
         <InfoCard v-if="display_unit==='$'" title="CVaR 95%" :val="-simulation.cvar95" :type="'currency-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (95%) over all simulation values.'"/>
-        <InfoCard v-else title="CVaR 95%" :val="-store.pctOfPortfolio(simulation.cvar95)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (95%) over all simulation values.'"/>
+        <InfoCard v-else title="CVaR 95%" :val="-portfolio.pctOfPortfolio(simulation.cvar95)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (95%) over all simulation values.'"/>
         <InfoCard v-if="display_unit==='$'" title="CVaR 99%" :val="-simulation.cvar99" :type="'currency-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (99%) over all simulation values.'"/>
-        <InfoCard v-else title="CVaR 99%" :val="-store.pctOfPortfolio(simulation.cvar99)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (99%) over all simulation values.'"/>
+        <InfoCard v-else title="CVaR 99%" :val="-portfolio.pctOfPortfolio(simulation.cvar99)/100" :type="'percentile-beneficial'" :decimals="2" :tooltip="'Conditional Value at Risk (99%) over all simulation values.'"/>
       </div>
 
       <!-- Histogram -->
@@ -105,7 +101,7 @@ function openSettings(){
               <TooltipComp content="Number of trading days to simulate into the future." />
             </label>
             <input
-              v-model.number="horizon_days"
+              v-model.number="simConfig.horizon_days"
               type="number"
               min="1"
               class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
@@ -117,7 +113,7 @@ function openSettings(){
               <TooltipComp content="Number of simulation paths to generate. More paths yield more accurate results." />
             </label>
             <input
-              v-model.number="n_sims"
+              v-model.number="simConfig.n_sims"
               type="number"
               min="1"
               class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
@@ -128,7 +124,7 @@ function openSettings(){
               Drift Scenario
               <TooltipComp content="Controls the expected return assumption. Shrinkage reduces historical drift towards zero to avoid overfitting." />
             </label>
-            <select v-model="drift_scenario" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
+            <select v-model="simConfig.drift_scenario" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
               <option value="SHRINKAGE_25">Shrinkage 25%</option>
               <option value="ZERO">Zero</option>
               <option value="HISTORICAL">Historical</option>
@@ -140,7 +136,7 @@ function openSettings(){
             Volatility Scenario
             <TooltipComp content="Controls how volatility is estimated. EWMA weights recent observations more heavily; the percentage controls the blend with historical estimates." />
           </label>
-          <select v-model="volatility_scenario" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
+          <select v-model="simConfig.volatility_scenario" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
             <option value="HISTORICAL">Historical</option>
             <option value="EMWA_100">EWMA 100%</option>
             <option value="EMWA_75">EWMA 75%</option>
@@ -152,7 +148,7 @@ function openSettings(){
             Multivariate-t Distribution
             <TooltipComp content="When enabled, uses a multivariate-t distribution to better capture fat tails and extreme market events." />
           </label>
-          <select v-model="multivariate_t" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
+          <select v-model="simConfig.multivariate_t" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
             <option value="ENABLED">Enabled</option>
             <option value="DISABLED">Disabled</option>
             </select>
@@ -162,10 +158,39 @@ function openSettings(){
             Regimes
             <TooltipComp content="When enabled, uses different market regimes to better capture varying market conditions." />
           </label>
-          <select v-model="regimes" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
+          <select v-model="simConfig.regimes" class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors">
             <option value="ENABLED">Enabled</option>
             <option value="DISABLED">Disabled</option>
             </select>
+        </div>
+
+        <!-- Backtest parameters -->
+        <div class="col-span-2 border-t border-border pt-3 -mb-1">
+          <span class="text-xs font-semibold uppercase tracking-wider text-text-secondary">Backtest</span>
+        </div>
+        <div>
+          <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+            Testing Periods
+            <TooltipComp content="Number of walk-forward windows used in the backtest." />
+          </label>
+          <input
+            v-model.number="simConfig.n_testings"
+            type="number"
+            min="1"
+            class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
+          />
+        </div>
+        <div>
+          <label class="flex items-center gap-1 text-xs text-text-secondary mb-1">
+            Period Length (days)
+            <TooltipComp content="Length of each walk-forward testing window in trading days." />
+          </label>
+          <input
+            v-model.number="simConfig.testing_period"
+            type="number"
+            min="1"
+            class="w-full bg-transparent border-b border-border px-1 py-1.5 text-text-primary text-sm focus:outline-none focus:border-accent transition-colors"
+          />
         </div>
         </div>
 

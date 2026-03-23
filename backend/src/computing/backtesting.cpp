@@ -193,7 +193,7 @@ namespace testing {
     }
 
 
-    job prepare_backtest_job(std::vector<assets::asset>& assets, std::vector<double>& weights, size_t n_sims, int testing_period, int n_testings ,monte_carlo::sim_config config){
+    job prepare_backtest_job(const double portfolio_value, std::vector<assets::asset>& assets, std::vector<double>& weights, size_t n_sims, int testing_period, int n_testings ,monte_carlo::sim_config config){
 
         precompute_sim_params pc;
         pc.testing_period = testing_period;
@@ -212,11 +212,19 @@ namespace testing {
         j.portfolio_values.resize(n_testings, 0.0);
         j.presets.reserve(n_testings);
 
+        j.portfolio_values[0] = portfolio_value;
         
-        for(int i = 0; i < n_testings; i++){
-
+        for(int i = 1; i < n_testings; i++){
+            int end_prev   = assets[0].n_data_points - testing_period * (i - 1) - 1;
+            int start_prev = assets[0].n_data_points - testing_period * i - 1;
+            double growth = 0.0;
             for(size_t a = 0; a < assets.size(); a++)
-                j.portfolio_values[i] += assets[a].data_points[assets[a].n_data_points - testing_period*i - 1 ].adjclose * weights[a];
+                growth += weights[a] * (assets[a].data_points[end_prev].adjclose /
+                                        assets[a].data_points[start_prev].adjclose);
+            j.portfolio_values[i] = j.portfolio_values[i - 1] / growth;
+        }
+
+        for(int i = 0; i < n_testings; i++){
 
             monte_carlo::sim_preset preset;
             preset.portfolio_value = j.portfolio_values[i];

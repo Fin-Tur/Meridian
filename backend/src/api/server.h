@@ -11,7 +11,7 @@
 #include "../computing/asset_computing.h"
 #include "../models/currency.h"
 #include "../models/coins.h"
-
+#include "../computing/backtesting.h"
 
 //========= DEV ONLY ==========
 //Python fast API to come
@@ -266,6 +266,73 @@ class server {
                     res.status = 400;
                     res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
                 }
+                res.status = 400;
+                res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
+                return;
+            }
+        });
+
+        svr.Post("/backtest", [](const httplib::Request& req, httplib::Response& res){
+            std::cout << "Received backtest request with body: " << req.body << std::endl;
+            try{
+                //Fetch body
+                auto body = nlohmann::json::parse(req.body);
+                double portfolio_value = body.at("portfolio_value").get<double>();
+                size_t testing_period = body.value("testing_period", 1);
+                size_t n_testings = body.value("n_testings", 100);
+                size_t n_sims = body.value("n_simulations", 5000);
+                monte_carlo::drift_scenario drift_scenario = body.value("drift_scenario", "SHRINKAGE_25") == "SHRINKAGE_25" ? monte_carlo::drift_scenario::SHRINKAGE_25 : 
+                                                body.value("drift_scenario", "SHRINKAGE_25") == "ZERO" ? monte_carlo::drift_scenario::ZERO :
+                                                body.value("drift_scenario", "SHRINKAGE_25") == "RISK_FREE" ? monte_carlo::drift_scenario::RISK_FREE :
+                                                monte_carlo::drift_scenario::HISTORICAL;
+                monte_carlo::volatility_model vol_model = body.value("volatility_model", "HISTORICAL") == "HISTORICAL" ? monte_carlo::volatility_model::HISTORICAL :
+                                                body.value("volatility_model", "HISTORICAL") == "EWMA_100" ? monte_carlo::volatility_model::EWMA_100 :
+                                                body.value("volatility_model", "HISTORICAL") == "EWMA_75" ? monte_carlo::volatility_model::EWMA_75 :
+                                                body.value("volatility_model", "HISTORICAL") == "EWMA_50" ? monte_carlo::volatility_model::EWMA_50 :
+                                                monte_carlo::volatility_model::HISTORICAL;
+
+            std::vector<assets::asset> fetched_assets;
+            std::vector<double> weights;
+
+            for (const auto& a : body.at("assets")) {
+                std::string ticker = a.at("ticker").get<std::string>();
+                std::string type   = a.at("type").get<std::string>();
+                double weight      = a.at("weight").get<double>();
+
+                assets::asset fetched;
+                if(coin::is_crypto(ticker)) type = "crypto"; 
+                if (type == "crypto") {
+                    std::string coinId = coin::to_coin_id(ticker);
+                    fetched = data_fetcher::fetch_crypto(coinId, ticker);
+                } else {
+                    fetched = data_fetcher::fetch_stock(ticker);
+                }
+                asset_compute::compute_log_return_for_asset(fetched);
+                fetched_assets.push_back(fetched);
+                weights.push_back(weight);
+            }
+
+            monte_carlo::sim_config config = {
+                .vol_model = vol_model,
+                .drift_scenario = drift_scenario,
+                .multivariate_t = body.value("multivariate_t", false),
+                .regimes = body.value("regimes", false)
+            };
+                
+            auto job = testing::prepare_backtest_job(portfolio_value, fetched_assets, weights, n_sims, testing_period, n_testings, config);
+            auto result = testing::run_backtest(job);
+
+            nlohmann::json response_json;
+            response_json["exceedance_rate_95"] = result.exceedance_rate_95;
+            response_json["exceedance_rate_99"] = result.exceedance_rate_99;
+            response_json["christoffersen_lr"] = result.christoffersen_lr;
+            response_json["christoffersen_pass"] = result.christoffersen_pass;
+            response_json["median_return_diff"] = result.median_return_diff;
+            response_json["avg_return_diff"] = result.avg_return_diff;
+
+            res.set_content(response_json.dump(), "application/json");
+
+            } catch(const std::exception& e) {
                 res.status = 400;
                 res.set_content(nlohmann::json{{"error", e.what()}}.dump(), "application/json");
                 return;

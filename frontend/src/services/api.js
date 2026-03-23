@@ -1,7 +1,8 @@
 const API_BASE = import.meta.env.VITE_API_BASE_URL
 
 import { checkResponse } from '@/services/utils.js'
-import { usePortfolioStore } from '@/stores/counter'
+import { usePortfolioStore } from '@/stores/portfolio'
+import { useSimConfigStore } from '@/stores/sim_config'
 
 async function api_call(endpoint, method = 'GET', body = null) {
   try {
@@ -35,8 +36,9 @@ async function api_call(endpoint, method = 'GET', body = null) {
 
 // Runs monte carlo simulation for the current portfolio.
 // Returns histogram bins, labels, avg_return, min, max, var95, var99, cvar95, cvar99.
-export async function fetch_simulation(n_sims, horizon_days, drift_scenario, volatility_scenario, multivariate_t, regimes) {
+export async function fetch_simulation() {
   const store = usePortfolioStore()
+  const simConfig = useSimConfigStore()
   const portfolioAssets = store.assets
 
   if (!portfolioAssets.length) return null
@@ -47,13 +49,13 @@ export async function fetch_simulation(n_sims, horizon_days, drift_scenario, vol
 
   const raw = await api_call('/simulate', 'POST', {
     portfolio_value: store.portfolio_value,
-    horizon_days: horizon_days,
-    n_simulations: n_sims,
+    horizon_days: simConfig.horizon_days,
+    n_simulations: simConfig.n_sims,
     assets: assetDataList,
-    drift_scenario: drift_scenario,
-    volatility_scenario: volatility_scenario,
-    multivariate_t: multivariate_t==="ENABLED",
-    regimes: regimes==="ENABLED",
+    drift_scenario: simConfig.drift_scenario,
+    volatility_scenario: simConfig.volatility_scenario,
+    multivariate_t: simConfig.multivariate_t==="ENABLED",
+    regimes: simConfig.regimes==="ENABLED",
   })
 
   if (!raw) return null
@@ -117,4 +119,40 @@ export async function fetch_portfolio() {
 export async function fetch_asset(symbol, type = 'stock') {
   return await api_call('/asset', 'POST', { ticker: symbol.toUpperCase(), type })
 
+}
+
+export async function fetchBacktestData(){
+  const portfolio = usePortfolioStore()
+  const simConfig = useSimConfigStore()
+
+  const portfolioAssets = portfolio.assets
+
+  if (!portfolioAssets.length) return null
+
+  const assetDataList = await Promise.all(
+    portfolioAssets.map(a => ({ ticker: a.symbol, type: a.type, weight: portfolio.weights[a.symbol] }))
+  )
+
+  const raw = await api_call('/backtest', 'POST', {
+    portfolio_value: portfolio.portfolio_value,
+    testing_period: simConfig.testing_period,
+    n_simulations: simConfig.n_sims,
+    assets: assetDataList,
+    drift_scenario: simConfig.drift_scenario,
+    volatility_scenario: simConfig.volatility_scenario,
+    multivariate_t: simConfig.multivariate_t==="ENABLED",
+    regimes: simConfig.regimes==="ENABLED",
+    n_testings: simConfig.n_testings
+  })
+
+  if (!raw) return null
+
+  return {
+    avg_return_diff: raw.avg_return_diff,
+    median_return_diff: raw.median_return_diff,
+    exceedance_rate_95: raw.exceedance_rate_95,
+    exceedance_rate_99: raw.exceedance_rate_99,
+    christoffersen_pass: raw.christoffersen_pass,
+    christoffersen_lr: raw.christoffersen_lr,
+  }
 }

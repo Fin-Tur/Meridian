@@ -49,7 +49,7 @@ namespace testing {
 
 
 
-    job prepare_backtest_job(std::vector<assets::asset>& assets, std::vector<double>& weights, size_t n_sims, int testing_period, int n_testings ,monte_carlo::sim_config config);
+    job prepare_backtest_job(const double portfolio_value, std::vector<assets::asset>& assets, std::vector<double>& weights, size_t n_sims, int testing_period, int n_testings ,monte_carlo::sim_config config);
     test_result run_backtest(const job& j);
 
 }

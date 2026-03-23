@@ -4,7 +4,7 @@ import { computed, ref } from 'vue'
 import { Pie } from 'vue-chartjs'
 import { Chart as ChartJS, ArcElement, Tooltip, Legend } from 'chart.js'
 ChartJS.register(ArcElement, Tooltip, Legend)
-import{ usePortfolioStore } from '@/stores/counter.js'
+import{ usePortfolioStore } from '@/stores/portfolio.js'
 
 const store = usePortfolioStore()
 
