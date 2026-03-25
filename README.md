@@ -327,8 +327,7 @@ For each period $i \in \{1, \ldots, n_{\text{testings}}-1\}$:
 1. **Simulate** — Run the full Monte Carlo simulation using the precomputed preset for window $i$
 2. **Compute actual loss** — Calculate the realized portfolio return:
    $$L_i = -\frac{V_{i-1} - V_i}{V_i}$$
-3. **Compare against VaR** — Check whether the actual loss exceeds the simulated VaR thresholds:
-   $$\text{Exceedance}_{95}: \quad L_i > \frac{\text{VaR}_{95}}{V_i}, \qquad \text{Exceedance}_{99}: \quad L_i > \frac{\text{VaR}_{99}}{V_i}$$
+3. **Compare against VaR** — Check whether the actual loss exceeds the simulated VaR thresholds
 4. **Track transitions** — Record consecutive exceedance transitions $(n_{00}, n_{01}, n_{10}, n_{11})$ for the Christoffersen test
 
 ---
@@ -568,5 +567,10 @@ npm install && npm run dev
 > Asset Explorer - Asset
 <img width="1466" height="928" alt="Screenshot From 2026-03-22 12-28-45" src="https://github.com/user-attachments/assets/3de15db8-7eae-4eb6-ae16-ace5e07d105c" />
 
+> Backtesting - Preset
+<img width="1027" height="398" alt="Screenshot 2026-03-25 092312" src="https://github.com/user-attachments/assets/5c525907-64d2-4d7a-bb3a-892e575593d8" />
+
+> Backtesting - Result
+<img width="1144" height="699" alt="Screenshot 2026-03-25 092302" src="https://github.com/user-attachments/assets/a25c0356-1a76-4f10-89e0-856e6485b8e8" />
 
 
