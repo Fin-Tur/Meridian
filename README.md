@@ -22,9 +22,9 @@
    - 3.2 [Precomnpute](#32-precompute)
    - 3.3 [Testing](#33-testing-phase)
    - 3.4 [Result-Analysis](#34-result-analysis)
-4. [API Reference](#3-api-reference)
-5. [Build & Setup](#4-build--setup)
-7. [View](#5-view)
+4. [API Reference](#4-api-reference)
+5. [Build & Setup](#5-build--setup)
+6. [View](#6-view)
 
 ---
 
@@ -273,13 +273,267 @@ $$\bar{V} = \frac{1}{N_{\text{sims}}} \sum_{k=1}^{N_{\text{sims}}} V_{(k)}, \qqu
 
 ## 3. Backtesting
 
-*coming soon*
+The backtesting engine validates the Monte Carlo simulation model by running it against historical data in a **rolling-window** fashion. For each window, a simulation is executed using only data available *before* that window, and the predicted risk measures are compared against the actual realized portfolio returns.
+
+---
+
+### 3.1 Settings
+
+A backtest job is configured with the following parameters:
+
+| Parameter | Type | Description |
+|---|---|---|
+| `portfolio_value` | `double` | Initial portfolio value at the most recent window |
+| `test_period` | `int` | Horizon in trading days per testing window |
+| `n_testings` | `int` | Number of rolling test windows |
+| `n_sims` | `size_t` | Number of Monte Carlo simulations per window |
+| `config` | `sim_config` | Simulation configuration (drift scenario, volatility model, regimes, multivariate-t) |
+
+The full simulation configuration (`sim_config`) is shared with the Monte Carlo engine — see [Section 2.5](#25-simulation-configuration).
+
+---
+
+### 3.2 Precompute
+
+For each testing window $t \in \{0, \ldots, n_{\text{testings}}-1\}$, statistical parameters are precomputed on a **shrinking historical window** that excludes the future test period. Each successive window $t$ removes the most recent `test_period` data points:
+
+$$N_t = N_0 - t \cdot \text{test\_period}$$
+
+The following parameters are computed per window:
+
+| Parameter | Symbol | Description |
+|---|---|---|
+| Mean log return | $\mu_t^{(a)}$ | Per-asset mean over $N_t$ data points |
+| Historical volatility | $\sigma_t^{(a)}$ | Per-asset sample standard deviation |
+| EWMA volatility | $\sigma_{\text{EWMA},t}^{(a)}$ | EWMA volatility with $\lambda$ depending on asset class |
+| Degrees of freedom | $\nu_t^{(a)}$ | Per-asset Student-t df with horizon correction |
+| Avg. degrees of freedom | $\bar{\nu}_t$ | Weight-averaged df (only if `multivariate_t` is enabled) |
+| Cholesky matrices | $L_t^{(r)}$ | Per-regime Cholesky-decomposed correlation matrices |
+
+Covariance matrices are recomputed adaptively:
+- **Normal covariance matrix**: recomputed every **10** test periods
+- **Stressed covariance matrix**: recomputed every **30** test periods (only when `regimes` is enabled)
+
+Historical portfolio values are back-calculated for each window using actual asset growth:
+
+$$V_t = \frac{V_{t-1}}{\sum_a w_a \cdot \frac{P_a^{(\text{end}_{t-1})}}{P_a^{(\text{start}_{t-1})}}}$$
+
+---
+
+### 3.3 Testing Phase
+
+For each period $i \in \{1, \ldots, n_{\text{testings}}-1\}$:
+
+1. **Simulate** — Run the full Monte Carlo simulation using the precomputed preset for window $i$
+2. **Compute actual loss** — Calculate the realized portfolio return:
+   $$L_i = -\frac{V_{i-1} - V_i}{V_i}$$
+3. **Compare against VaR** — Check whether the actual loss exceeds the simulated VaR thresholds:
+   $$\text{Exceedance}_{95}: \quad L_i > \frac{\text{VaR}_{95}}{V_i}, \qquad \text{Exceedance}_{99}: \quad L_i > \frac{\text{VaR}_{99}}{V_i}$$
+4. **Track transitions** — Record consecutive exceedance transitions $(n_{00}, n_{01}, n_{10}, n_{11})$ for the Christoffersen test
+
+---
+
+### 3.4 Result Analysis
+
+#### Exceedance Rates
+
+$$\hat{p}_{95} = \frac{\sum_{i} \mathbb{1}[L_i > \text{VaR}_{95,i}]}{n_{\text{obs}}}, \qquad \hat{p}_{99} = \frac{\sum_{i} \mathbb{1}[L_i > \text{VaR}_{99,i}]}{n_{\text{obs}}}$$
+
+A well-calibrated model should produce $\hat{p}_{95} \approx 0.05$ and $\hat{p}_{99} \approx 0.01$.
+
+#### Christoffersen Independence Test
+
+Tests whether VaR exceedances are **serially independent** using a likelihood ratio statistic:
+
+$$LR = -2 \left[ (n_{00}+n_{10})\ln(1-\hat{p}) + (n_{01}+n_{11})\ln(\hat{p}) - n_{00}\ln(1-\hat{p}_{01}) - n_{01}\ln(\hat{p}_{01}) - n_{10}\ln(1-\hat{p}_{11}) - n_{11}\ln(\hat{p}_{11}) \right]$$
+
+where:
+- $\hat{p}_{01} = n_{01} / (n_{00} + n_{01})$ — probability of exceedance after a non-exceedance
+- $\hat{p}_{11} = n_{11} / (n_{10} + n_{11})$ — probability of exceedance after an exceedance
+- $\hat{p} = (n_{01} + n_{11}) / (n_{00} + n_{01} + n_{10} + n_{11})$ — unconditional exceedance probability
+
+**Pass criterion:** $LR < 3.841$ ($\chi^2$ critical value at 95% confidence, 1 degree of freedom). A pass indicates that exceedances are independent — i.e. the model does not systematically cluster risk underestimation.
+
+#### Median & Average Return Difference
+
+The simulated median portfolio value is compared to the actual realized value per window. The median and average of these percentage differences across all windows provide a bias indicator for the model.
 
 ---
 
 ## 4. API Reference
 
-> *coming soon*
+The backend exposes a REST API via an embedded HTTP server (cpp-httplib). All endpoints accept and return `application/json`.
+
+---
+
+### `GET /health`
+
+Health check endpoint.
+
+**Response:**
+```json
+{ "status": "ok" }
+```
+
+---
+
+### `POST /simulate`
+
+Run a Monte Carlo simulation for a portfolio.
+
+**Request Body:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `portfolio_value` | `number` | *required* | Total portfolio value |
+| `horizon_days` | `number` | `252` | Simulation horizon in trading days |
+| `n_simulations` | `number` | `1000` | Number of simulation paths |
+| `drift_scenario` | `string` | `"SHRINKAGE_25"` | One of `HISTORICAL`, `ZERO`, `SHRINKAGE_25`, `RISK_FREE` |
+| `volatility_model` | `string` | `"HISTORICAL"` | One of `HISTORICAL`, `EWMA_100`, `EWMA_75`, `EWMA_50` |
+| `multivariate_t` | `bool` | `false` | Use multivariate t-distribution |
+| `regimes` | `bool` | `false` | Enable regime-switching model |
+| `assets` | `array` | *required* | Array of asset objects |
+
+**Asset object:**
+
+| Field | Type | Description |
+|---|---|---|
+| `ticker` | `string` | Asset ticker symbol (e.g. `"AAPL"`, `"BTC"`) |
+| `type` | `string` | `"stock"` or `"crypto"` |
+| `weight` | `number` | Portfolio weight (should sum to 1.0) |
+
+**Response:**
+
+| Field | Type | Description |
+|---|---|---|
+| `var_95` | `number` | Value at Risk at 95% confidence |
+| `var_99` | `number` | Value at Risk at 99% confidence |
+| `cvar_95` | `number` | Conditional VaR at 95% |
+| `cvar_99` | `number` | Conditional VaR at 99% |
+| `avg` | `number` | Mean simulated portfolio value |
+| `median` | `number` | Median simulated portfolio value |
+| `min` | `number` | Minimum simulated portfolio value |
+| `max` | `number` | Maximum simulated portfolio value |
+| `histogram_bins` | `number[]` | 50-bin histogram of final portfolio values |
+| `bin_width` | `number` | Width of each histogram bin |
+
+---
+
+### `POST /correlation`
+
+Compute the correlation matrix for a set of assets.
+
+**Request Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `assets` | `array` | Array of `{ "ticker": string, "type": string }` objects |
+
+**Response:**
+
+A nested JSON object mapping each ticker pair to its correlation coefficient:
+```json
+{
+  "AAPL": { "AAPL": 1.0, "MSFT": 0.78 },
+  "MSFT": { "AAPL": 0.78, "MSFT": 1.0 }
+}
+```
+
+---
+
+### `POST /asset`
+
+Fetch market data and compute key statistics for a single asset.
+
+**Request Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `ticker` | `string` | Asset ticker symbol |
+| `type` | `string` | `"stock"` or `"crypto"` |
+
+**Response:**
+
+| Field | Type | Description |
+|---|---|---|
+| `symbol` | `string` | Ticker symbol |
+| `currency` | `string` | Price currency (e.g. `"USD"`) |
+| `adj_closes` | `number[]` | Historical adjusted close prices |
+| `volatility` | `number` | Annualized volatility ($\sigma \cdot \sqrt{252}$) |
+| `avg_log_return` | `number` | Annualized mean log return ($\mu \cdot 252$) |
+| `sharpe_ratio` | `number` | Sharpe ratio |
+| `max_drawdown` | `number` | Maximum drawdown |
+| `ytd_return` | `number` | Year-to-date return |
+| `skewness` | `number` | Return distribution skewness |
+| `kurtosis` | `number` | Return distribution kurtosis |
+
+---
+
+### `POST /portfolio`
+
+Compute portfolio value and asset weights from holdings.
+
+**Request Body:**
+
+| Field | Type | Description |
+|---|---|---|
+| `assets` | `array` | Array of asset objects with `ticker`, `type`, and `amount` (number of units held) |
+
+**Response:**
+
+| Field | Type | Description |
+|---|---|---|
+| `portfolio_value` | `number` | Total portfolio value in USD |
+| `weights` | `array` | Array of `[ticker, weight]` pairs |
+
+> All asset prices are unified to USD via live FX rates before computing the portfolio value.
+
+---
+
+### `POST /backtest`
+
+Run a rolling-window backtest of the Monte Carlo model.
+
+**Request Body:**
+
+| Field | Type | Default | Description |
+|---|---|---|---|
+| `portfolio_value` | `number` | *required* | Initial portfolio value |
+| `testing_period` | `number` | `1` | Trading days per test window |
+| `n_testings` | `number` | `100` | Number of rolling windows |
+| `n_simulations` | `number` | `5000` | Simulations per window |
+| `drift_scenario` | `string` | `"SHRINKAGE_25"` | Drift scenario |
+| `volatility_model` | `string` | `"HISTORICAL"` | Volatility model |
+| `multivariate_t` | `bool` | `false` | Use multivariate t-distribution |
+| `regimes` | `bool` | `false` | Enable regime-switching |
+| `assets` | `array` | *required* | Array of `{ "ticker", "type", "weight" }` objects |
+
+**Response:**
+
+| Field | Type | Description |
+|---|---|---|
+| `exceedance_rate_95` | `number` | Fraction of windows where actual loss exceeded VaR 95 |
+| `exceedance_rate_99` | `number` | Fraction of windows where actual loss exceeded VaR 99 |
+| `christoffersen_lr` | `number` | Christoffersen likelihood ratio statistic |
+| `christoffersen_pass` | `bool` | `true` if exceedances are serially independent ($LR < 3.841$) |
+| `median_return_diff` | `number` | Median simulated vs. actual return difference |
+| `avg_return_diff` | `number` | Average simulated vs. actual return difference |
+| `actual_portfolio_values` | `number[]` | Realized portfolio values per window |
+| `exceedances_95` | `bool[]` | Per-window 95% exceedance flags |
+| `exceedances_99` | `bool[]` | Per-window 99% exceedance flags |
+| `simulated_portfolio_value` | `number[]` | Simulated median portfolio value per window |
+
+---
+
+### Data Sources
+
+| Asset Class | Provider | Endpoint | Data |
+|---|---|---|---|
+| Stocks | Yahoo Finance | `query1.finance.yahoo.com/v8/finance/chart/` | Up to 10y daily adjusted closes |
+| Crypto | Kraken | `api.kraken.com/0/public/OHLC` | Up to 1440 days daily OHLC candles |
+| FX Rates | Yahoo Finance | `query1.finance.yahoo.com/v8/finance/chart/` | Live currency conversion rates |
+
+All fetched data is cached in-memory for 1 day to reduce API calls.
 
 ---
 
