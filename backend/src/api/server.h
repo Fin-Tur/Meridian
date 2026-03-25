@@ -330,6 +330,11 @@ class server {
             response_json["median_return_diff"] = result.median_return_diff;
             response_json["avg_return_diff"] = result.avg_return_diff;
 
+            response_json["actual_portfolio_values"] = result.actual_portfolio_values;
+            response_json["exceedances_95"] = result.exceedances_95;
+            response_json["exceedances_99"] = result.exceedances_99;
+            response_json["simulated_portfolio_value"] = result.simulated_portfolio_value;
+
             res.set_content(response_json.dump(), "application/json");
 
             } catch(const std::exception& e) {

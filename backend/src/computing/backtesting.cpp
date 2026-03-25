@@ -246,6 +246,11 @@ namespace testing {
 
     test_result run_backtest(const job& j) {
         test_result result;
+        const int n_periods = j.n_testings - 1;
+        result.actual_portfolio_values.reserve(n_periods);
+        result.exceedances_95.reserve(n_periods);
+        result.exceedances_99.reserve(n_periods);
+        result.simulated_portfolio_value.reserve(n_periods);
 
         std::vector<double> simulated_off_percentages(j.n_testings - 1);
 
@@ -279,7 +284,12 @@ namespace testing {
 
             exceeded_before = exceeded;
 
-            simulated_off_percentages[i-1] = sim_res.median / j.portfolio_values[i] - 1.0;
+            result.actual_portfolio_values.push_back(j.portfolio_values[i]);
+            result.exceedances_95.push_back(exceeded);
+            result.exceedances_99.push_back(actual_loss > var_99_pct);
+            result.simulated_portfolio_value.push_back(sim_res.median);
+
+            simulated_off_percentages[i-1] = sim_res.median / j.portfolio_values[i-1] - 1.0;
 
         }
 

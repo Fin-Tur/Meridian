@@ -154,5 +154,9 @@ export async function fetchBacktestData(){
     exceedance_rate_99: raw.exceedance_rate_99,
     christoffersen_pass: raw.christoffersen_pass,
     christoffersen_lr: raw.christoffersen_lr,
+    exceedances_95: raw.exceedances_95,
+    exceedances_99: raw.exceedances_99,
+    simulated_portfolio_value: raw.simulated_portfolio_value,
+    actual_portfolio_value: raw.actual_portfolio_values,
   }
 }

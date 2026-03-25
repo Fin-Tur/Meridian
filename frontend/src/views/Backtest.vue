@@ -6,6 +6,7 @@ import { useSimConfigStore } from '@/stores/sim_config.js'
 import InfoCard from '@/components/InfoCard.vue'
 import BackArrow from '@/components/BackArrow.vue'
 import UnitToggle from '@/components/UnitToggle.vue'
+import BacktestChart from '@/components/BacktestChart.vue'
 
 const portfolio = usePortfolioStore()
 const simConfig = useSimConfigStore()
@@ -75,7 +76,7 @@ const volLabel   = { HISTORICAL: 'Historical', EMWA_100: 'EWMA 100%', EMWA_75: '
         <InfoCard
           v-if="display_unit === '$'"
           title="Avg Estimated Return Error %"
-          :val="(backtestData.avg_return_diff*100 * portfolio.portfolio_value ?? 0)"
+          :val="(backtestData.avg_return_diff * portfolio.portfolio_value ?? 0)"
           type="currency"
           :decimals="2"
           tooltip="Average estimated return error across all testing periods."
@@ -83,7 +84,7 @@ const volLabel   = { HISTORICAL: 'Historical', EMWA_100: 'EWMA 100%', EMWA_75: '
         <InfoCard
           v-else
           title="Avg Estimated Return Error %"
-          :val="(backtestData.avg_return_diff * 100 ?? 0)"
+          :val="(backtestData.avg_return_diff  ?? 0)"
           type="percentile"
           :decimals="2"
           tooltip="Average estimated return error across all testing periods."
@@ -92,7 +93,7 @@ const volLabel   = { HISTORICAL: 'Historical', EMWA_100: 'EWMA 100%', EMWA_75: '
         <InfoCard
           v-if="display_unit === '$'"
           title="Median Estimated Return Error %"
-          :val="(backtestData.median_return_diff*100 * portfolio.portfolio_value ?? 0)"
+          :val="(backtestData.median_return_diff * portfolio.portfolio_value ?? 0)"
           type="currency"
           :decimals="2"
           tooltip="Median estimated return error across all testing periods."
@@ -100,7 +101,7 @@ const volLabel   = { HISTORICAL: 'Historical', EMWA_100: 'EWMA 100%', EMWA_75: '
         <InfoCard
           v-else
           title="Median Estimated Return Error %"
-          :val="(backtestData.median_return_diff * 100 ?? 0)"
+          :val="(backtestData.median_return_diff  ?? 0)"
           type="percentile"
           :decimals="2"
           tooltip="Median estimated return error across all testing periods."
@@ -131,6 +132,15 @@ const volLabel   = { HISTORICAL: 'Historical', EMWA_100: 'EWMA 100%', EMWA_75: '
           :tooltip="`Christoffersen's test for correct conditional coverage of regimes. Clustering in VaR Exceedances lead to higher absolute p-values, while independence leads to lower  absolute p-values.`"
         />
       </div>
+
+      <!-- Chart -->
+      <BacktestChart
+        v-if="backtestData.actual_portfolio_value"
+        :actual-values="backtestData.actual_portfolio_value"
+        :simulated-values="backtestData.simulated_portfolio_value"
+        :exceedances95="backtestData.exceedances_95"
+        :exceedances99="backtestData.exceedances_99"
+      />
 
     </template>
 

@@ -20,6 +20,10 @@ namespace testing {
         bool christoffersen_pass;
         double median_return_diff;
         double avg_return_diff;
+        std::vector<double> actual_portfolio_values;
+        std::vector<bool> exceedances_95;
+        std::vector<bool> exceedances_99;
+        std::vector<double> simulated_portfolio_value;
     };
 
     struct precompute_sim_params {
