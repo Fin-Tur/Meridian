@@ -261,14 +261,14 @@ namespace testing {
         bool exceeded_before = false;
 
         for(int i = 1; i < j.n_testings; i++) {
-            auto sim_res = monte_carlo::run_simulation(j.presets[i], j.config);
+            auto sim_res = monte_carlo::run_simulation(j.presets[i-1], j.config);
 
             double actual_return = (j.portfolio_values[i-1] - j.portfolio_values[i])
                                 / j.portfolio_values[i];
             double actual_loss = -actual_return;
 
-            double var_95_pct = sim_res.var_95 / j.portfolio_values[i];
-            double var_99_pct = sim_res.var_99 / j.portfolio_values[i];
+            double var_95_pct = sim_res.var_95 / j.portfolio_values[i-1];
+            double var_99_pct = sim_res.var_99 / j.portfolio_values[i-1];
 
             bool exceeded = actual_loss > var_95_pct;
 
@@ -284,7 +284,7 @@ namespace testing {
 
             exceeded_before = exceeded;
 
-            result.actual_portfolio_values.push_back(j.portfolio_values[i]);
+            result.actual_portfolio_values.push_back(j.portfolio_values[i-1]);
             result.exceedances_95.push_back(exceeded);
             result.exceedances_99.push_back(actual_loss > var_99_pct);
             result.simulated_portfolio_value.push_back(sim_res.median);
