@@ -240,7 +240,7 @@ namespace testing {
             preset.cholesky_cov_mats = pc.cholesky_cov_mats[i];
             j.presets.push_back(preset);
         }
-        
+
         return j;
     }
 
@@ -261,15 +261,17 @@ namespace testing {
         bool exceeded_before = false;
 
         for(int i = 1; i < j.n_testings; i++) {
-            auto sim_res = monte_carlo::run_simulation(j.presets[i-1], j.config);
+            monte_carlo::sim_preset preset = j.presets[i-1];
+            auto sim_res = monte_carlo::run_simulation(preset, j.config);
 
+            // Standard return: (end - start) / start, where start = portfolio_values[i]
             double actual_return = (j.portfolio_values[i-1] - j.portfolio_values[i])
                                 / j.portfolio_values[i];
+                                
             double actual_loss = -actual_return;
 
-            double var_95_pct = sim_res.var_95 / j.portfolio_values[i-1];
-            double var_99_pct = sim_res.var_99 / j.portfolio_values[i-1];
-
+            double var_95_pct = sim_res.var_95 / j.portfolio_values[i];
+            double var_99_pct = sim_res.var_99 / j.portfolio_values[i];
             bool exceeded = actual_loss > var_95_pct;
 
             if(exceeded_before && exceeded)  n_11++;
@@ -289,7 +291,7 @@ namespace testing {
             result.exceedances_99.push_back(actual_loss > var_99_pct);
             result.simulated_portfolio_value.push_back(sim_res.median);
 
-            simulated_off_percentages[i-1] = sim_res.median / j.portfolio_values[i-1] - 1.0;
+            simulated_off_percentages[i-1] = sim_res.median / j.portfolio_values[i] - 1.0;
 
         }
 
@@ -331,6 +333,10 @@ namespace testing {
         }
         result.avg_return_diff = sum / simulated_off_percentages.size();
 
+        std::reverse(result.simulated_portfolio_value.begin(), result.simulated_portfolio_value.end());
+        std::reverse(result.actual_portfolio_values.begin(), result.actual_portfolio_values.end());
+        std::reverse(result.exceedances_95.begin(), result.exceedances_95.end());
+        std::reverse(result.exceedances_99.begin(), result.exceedances_99.end());
         return result;
     }
 }
