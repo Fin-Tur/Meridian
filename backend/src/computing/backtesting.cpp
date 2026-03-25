@@ -2,6 +2,7 @@
 #include "asset_computing.h"
 #include "../models/coins.h"
 #include <cmath>
+#include <thread>
 
 #define u32 uint32_t
 
@@ -134,29 +135,34 @@ namespace testing {
         }
     }
 
-    void _compute_cholesky_cov_mats(precompute_sim_params& pc, std::vector<assets::asset>& assets, bool multiple_matrices = false){
+    void _compute_cholesky_cov_mats(precompute_sim_params& pc, const std::vector<assets::asset>& assets, bool multiple_matrices = false){
         pc.cholesky_cov_mats.assign(pc.n_testings, std::unordered_map<monte_carlo::regimes, Mat>());
 
-        std::vector<int32_t> orig_dps(assets.size());
-        for(size_t a = 0; a < assets.size(); a++)
-            orig_dps[a] = assets[a].n_data_points;
+        // Shallow views: shared data_points pointer, independent n_data_points
+        std::vector<assets::asset> views(assets.size());
+        for(size_t a = 0; a < assets.size(); a++){
+            views[a].symbol       = assets[a].symbol;
+            views[a].currency     = assets[a].currency;
+            views[a].data_points  = assets[a].data_points;
+            views[a].n_data_points = assets[a].n_data_points;
+            views[a].weight       = assets[a].weight;
+        }
 
-        int32_t included_dps = orig_dps[0] - pc.testing_period;
-        for(size_t a = 0; a < assets.size(); a++)
-            assets[a].n_data_points = included_dps;
+        int32_t included_dps = views[0].n_data_points - pc.testing_period;
+        for(size_t a = 0; a < views.size(); a++)
+            views[a].n_data_points = included_dps;
 
-            Mat cov_matrix, cov_matrix_stressed;
+        Mat cov_matrix, cov_matrix_stressed;
 
         if(!multiple_matrices){
-            cov_matrix = asset_compute::compute_covariance_matrix(assets, false);
+            cov_matrix = asset_compute::compute_covariance_matrix(views, false);
             asset_compute::normalize_covariance_matrix(cov_matrix);
         }else{
-            auto [cov_matrix_temp, cov_matrix_stressed_temp] = asset_compute::compute_cov_matricies(assets);
+            auto [cov_matrix_temp, cov_matrix_stressed_temp] = asset_compute::compute_cov_matricies(views);
             cov_matrix = cov_matrix_temp;
             cov_matrix_stressed = cov_matrix_stressed_temp;
             asset_compute::normalize_covariance_matrix(cov_matrix);
             asset_compute::normalize_covariance_matrix(cov_matrix_stressed);
-
         }
 
         uint32_t counter_normal  = 0;
@@ -165,20 +171,20 @@ namespace testing {
         for(int t = 0; t < pc.n_testings; t++){
             if(t > 0){
                 included_dps -= pc.testing_period;
-                for(size_t a = 0; a < assets.size(); a++)
-                    assets[a].n_data_points = included_dps;
+                for(size_t a = 0; a < views.size(); a++)
+                    views[a].n_data_points = included_dps;
 
                 counter_normal  += pc.testing_period;
                 counter_stressed += pc.testing_period;
 
                 if(counter_normal >= 10){
                     counter_normal = 0;
-                    cov_matrix = asset_compute::compute_covariance_matrix(assets, false);
+                    cov_matrix = asset_compute::compute_covariance_matrix(views, false);
                     asset_compute::normalize_covariance_matrix(cov_matrix);
                 }
                 if(counter_stressed >= 30 && multiple_matrices){
                     counter_stressed = 0;
-                    cov_matrix_stressed = asset_compute::compute_covariance_matrix(assets, true);
+                    cov_matrix_stressed = asset_compute::compute_covariance_matrix(views, true);
                     asset_compute::normalize_covariance_matrix(cov_matrix_stressed);
                 }
             }
@@ -188,8 +194,8 @@ namespace testing {
             if(multiple_matrices) pc.cholesky_cov_mats[t][monte_carlo::regimes::CRISIS]  = asset_compute::cholesky_decomp(cov_matrix_stressed);
         }
 
-        for(size_t a = 0; a < assets.size(); a++)
-            assets[a].n_data_points = orig_dps[a];
+        // Prevent double-free: views share data_points with original assets
+        for(auto& v : views) v.data_points = nullptr;
     }
 
 
@@ -198,12 +204,26 @@ namespace testing {
         precompute_sim_params pc;
         pc.testing_period = testing_period;
         pc.n_testings = n_testings;
-        _compute_sigma(pc, assets);
-        _compute_sigma_ewma(pc, assets);
-        _compute_mu(pc, assets);
-        _compute_dof_each(pc, assets);
+        // Phase 1: mu, sigma, cholesky are independent (cholesky uses shallow views, no data race)
+        {
+            std::thread t_mu([&]{ _compute_mu(pc, assets); });
+            std::thread t_sigma([&]{ _compute_sigma(pc, assets); });
+            std::thread t_chol([&]{ _compute_cholesky_cov_mats(pc, assets, config.regimes); });
+            t_mu.join();
+            t_sigma.join();
+            t_chol.join();
+        }
+
+        // Phase 2: ewma needs sigma, dof_each needs mu + sigma
+        {
+            std::thread t_ewma([&]{ _compute_sigma_ewma(pc, assets); });
+            std::thread t_dof([&]{ _compute_dof_each(pc, assets); });
+            t_ewma.join();
+            t_dof.join();
+        }
+
+        // Phase 3: dof_avg needs df from dof_each
         if(config.multivariate_t) _compute_dof_avg(pc, weights);
-        _compute_cholesky_cov_mats(pc, assets, config.regimes);
 
         job j;
         j.config = config;
